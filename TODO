@@ -1,0 +1,5 @@
+- Aggregate executor names
+	- Build out cases for each
+	- Can't run stuff thats manual
+
+- Add support for check elevation

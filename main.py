@@ -35,6 +35,11 @@ async def main():
     a = Atomic("atomics/T1003.001.yaml", "mythic", mythic_instance, 20)
 
     # Atomic Tests
+    for t in a.tests:
+        print(f"{t.name} -- {t.executor['name']}")
+
+    sys.exit(0)
+
     p_test = a.tests[0]
     await p_test.check_prereqs()
     await p_test.run_executor()
@@ -44,6 +49,10 @@ async def main():
     await p_test.run_executor()
 
     p_test = a.tests[2]
+    await p_test.check_prereqs()
+    await p_test.run_executor()
+
+    p_test = a.tests[3]
     await p_test.check_prereqs()
     await p_test.run_executor()
 
