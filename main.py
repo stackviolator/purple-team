@@ -28,33 +28,52 @@ async def update_callback(mythic_instance):
     )
 
 async def main():
-    # Login :)
-    mythic_instance = await login()
+    # TODO, take these in as a cli params
+    API = "mythic"
+    api_instance = None
+    HOSTNAME = "GORILLA-DC01-2022"
+    TIMEOUT = 60
+
+    callback_id = -1
+    if API == "mythic":
+        # Login :)
+        api_instance = await login()
+
+        # Get the callback ID
+        callbacks = await mythic.get_all_active_callbacks(mythic=api_instance)
+        for c in callbacks:
+            if c['host'] == HOSTNAME:
+                callback_id = c['display_id']
+        if callback_id == -1:
+            print(f'[-] Failed to get callback on host: {HOSTNAME}')
+            sys.exit(-1)
+
+    # Check if the API Instance exists
+    if api_instance is None:
+        print(f'[-] API ({API}) Instance is None')
+        sys.exit(-1)
 
     # Define atomics object
-    a = Atomic("atomics/T1003.001.yaml", "mythic", mythic_instance, 20)
+    a = Atomic("atomics/T1003.001.yaml", API, api_instance, TIMEOUT, callback_id)
+
+    test = a.tests[10]
+    err = await test.check_prereqs()
+    if err is None:
+        await test.run_executor()
+
+    test = a.tests[11]
+    err = await test.check_prereqs()
+    if err is None:
+        await test.run_executor()
 
     # Atomic Tests
-    for t in a.tests:
-        print(f"{t.name} -- {t.executor['name']}")
-
-    sys.exit(0)
-
-    p_test = a.tests[0]
-    await p_test.check_prereqs()
-    await p_test.run_executor()
-
-    p_test = a.tests[1]
-    await p_test.check_prereqs()
-    await p_test.run_executor()
-
-    p_test = a.tests[2]
-    await p_test.check_prereqs()
-    await p_test.run_executor()
-
-    p_test = a.tests[3]
-    await p_test.check_prereqs()
-    await p_test.run_executor()
+    if sys.argv[-1] == '-t':
+        for i, t in enumerate(a.tests):
+            print(f"{i} -- {t.name}")
+            if t.executor['name'] != "manual":
+                err = await t.check_prereqs()
+                if err is None:
+                    await t.run_executor()
 
 if __name__ == "__main__":
     asyncio.run(main())

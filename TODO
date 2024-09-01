@@ -2,4 +2,11 @@
 	- Build out cases for each
 	- Can't run stuff thats manual
 
-- Add support for check elevation
+- Add support for check elevation (bc i am not doing it) (everything works from domainadmin account (lol))
+
+- Think about modularity for different executor engines
+	- Currently passing in mythic specific stuff into AtmoicTests, like callback id, etc
+
+- Add argparser
+
+- Some of the scripts expect winget to be installed without trying to install it, ig hardcode a check to install it if its not there
