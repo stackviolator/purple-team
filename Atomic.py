@@ -172,18 +172,17 @@ class AtomicTest:
                 timeout=self.timeout,
                 wait_for_complete=True,
             )
-            print(f"[*] Issued a task: {task}")
+            print(f"[*] Issued a task: '{task['command_name']} {task['original_params'].strip('\n')}' to callback ID {self.callback_id}")
 
             output = await mythic.waitfor_for_task_output(
                 mythic=self.api_instance, task_display_id=task["display_id"]        )
             output = output.decode('utf-8')
-            print(task.keys())
             self.write_log(task['original_params'], task['timestamp'], task['status'], self.api, self.name, self.guid, self.description, self.platforms, command_name, self.timeout, self.callback_id, output)
-            print(f"Got output:\n{"-" * 20}\n{output}")
+            print(f"[*] Got output:\n{"-" * 20}\n{output}\n{"-"*20}")
             return output
 
         except Exception as e:
-            print(f"Got an exception trying to issue task: {command_name} {parameters} {str(e)}")
+            print(f"[-] Got an exception trying to issue task: {command_name} {parameters} {str(e)}")
 
     # Some atomic prereqs assume winget is installed but don't have a backup if it isnt
     # So try to install it first :)
