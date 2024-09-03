@@ -10,3 +10,9 @@
 - Add argparser
 
 - Some of the scripts expect winget to be installed without trying to install it, ig hardcode a check to install it if its not there
+
+- Write unit tests or whatever
+
+- Do logging
+
+- Sort TODO

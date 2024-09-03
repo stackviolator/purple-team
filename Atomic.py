@@ -81,10 +81,6 @@ class AtomicTest:
             # Clean and execute prereqtest
             cmd = d['prereq_command'].replace('exit 0', 'echo "Test Passed"')
             cmd, ex = self.clean_cmd(cmd, ex)
-            print("*" * 20)
-            print(ex)
-            print(cmd)
-            print("*" * 20)
             output = await self.execute_task(ex, cmd, self.callback_id)
 
             # If the test fails, execute the get_prereq_command(s)
@@ -105,6 +101,7 @@ class AtomicTest:
                 if "Test Passed" not in output:
                     print(f"[-] Failed to satisfy prerequisites for {self.name}\n\tget_prereq_command: {cmd}")
                     print(f"[-] Skipping {self.name}")
+                    # TODO add proper errors and stack traces
                     return "i am an error to be changed later"
         return None
 
@@ -122,8 +119,12 @@ class AtomicTest:
             await self.execute_task(self.executor['name'], cmd, self.callback_id)
 
     # Note for future self, this will give a timestamp for logging
-    async def execute_task(self, ex_technique, parameters, callback_id):
+    async def execute_task(self, ex_technique, parameters, callback_id, timeout=None):
+        timeout = self.timeout if timeout is None else timeout
         command_name = ex_technique
+        print('*' * 20)
+        print(parameters)
+        print('*' * 20)
 
         # Create the task
         try:
@@ -144,7 +145,7 @@ class AtomicTest:
             return output
 
         except Exception as e:
-            print(f"Got an exception trying to issue task: {str(e)}")
+            print(f"Got an exception trying to issue task: {command_name} {parameters} {str(e)}")
 
     # YAML has args in the following format #{ARG}
     # Remove them in the command to run and replace with the argument in self.args
@@ -159,3 +160,24 @@ class AtomicTest:
             # Replace defaults - if exist
             cmd = cmd.replace('PathToAtomicsFolder', self.atomics_folder)
         return cmd
+
+    # Some atomic prereqs assume winget is installed but don't have a backup if it isnt
+    # So try to install it first :)
+    # Optional TODO, instead of iex the install script, keep it in repo and upload it then run from beacon
+    async def install_winget(self):
+        print("[*] Checking for winget-cli installation")
+        # Check if winget is installed
+        cmd = 'if (Get-Command winget -ErrorAction SilentlyContinue) { echo "Test Passed" } else { echo "Test Failed" }'
+        cmd, ex = self.clean_cmd(cmd, 'powershell')
+        output = await self.execute_task(ex, cmd, self.callback_id)
+        if "Test Passed" not in output:
+            print("[-] winget not found. Installing...")
+            # Install winget
+            cmd = 'irm asheroto.com/winget | iex' # taken from https://github.com/asheroto/winget-install
+            cmd, ex = self.clean_cmd(cmd, 'powershell')
+            output = await self.execute_task(ex, cmd, self.callback_id, timeout=300) # big ol timeout since it takes a while to install
+            # Le epic recursive loop, surely this wont cause the program to fail if winget cant be installed from the script
+            # If Test Passed is never in the output, this will recurse forever, lol
+            self.install_winget()
+        print('[+] winget is installed :)')
+        return

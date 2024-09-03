@@ -34,6 +34,7 @@ async def main():
     HOSTNAME = "GORILLA-DC01-2022"
     TIMEOUT = 60
 
+    """ SETUP """
     callback_id = -1
     if API == "mythic":
         # Login :)
@@ -55,13 +56,11 @@ async def main():
 
     # Define atomics object
     a = Atomic("atomics/T1003.001.yaml", API, api_instance, TIMEOUT, callback_id)
+    await a.tests[0].install_winget()
+    """ SETUP """
 
-    test = a.tests[10]
-    err = await test.check_prereqs()
-    if err is None:
-        await test.run_executor()
-
-    test = a.tests[11]
+    """ TESTING """
+    test = a.tests[13]
     err = await test.check_prereqs()
     if err is None:
         await test.run_executor()
@@ -74,6 +73,7 @@ async def main():
                 err = await t.check_prereqs()
                 if err is None:
                     await t.run_executor()
+    """ TESTING """
 
 if __name__ == "__main__":
     asyncio.run(main())
