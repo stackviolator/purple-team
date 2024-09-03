@@ -56,15 +56,10 @@ async def main():
 
     # Define atomics object
     a = Atomic("atomics/T1003.001.yaml", API, api_instance, TIMEOUT, callback_id)
-    await a.tests[0].install_winget()
+    # TODO uncomment later :) # await a.tests[0].install_winget()
     """ SETUP """
 
     """ TESTING """
-    test = a.tests[13]
-    err = await test.check_prereqs()
-    if err is None:
-        await test.run_executor()
-
     # Atomic Tests
     if sys.argv[-1] == '-t':
         for i, t in enumerate(a.tests):

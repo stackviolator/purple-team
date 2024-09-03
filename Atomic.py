@@ -24,7 +24,7 @@ class Atomic:
 
         self.attack_technique = self.yaml['attack_technique']
         self.display_name = self.yaml['display_name']
-        self.tests = [AtomicTest(dict(x), self.api, self.api_instance, self.timeout, self.callback_id) for x in self.yaml['atomic_tests']]
+        self.tests = [AtomicTest(dict(x), self.api, self.api_instance, self.timeout, self.callback_id) for x in self.yaml['atomic_tests']] # sick list comprension
 
 class AtomicTest:
     def __init__(self, test, api, api_instance, timeout, callback_id=None):
@@ -57,20 +57,35 @@ class AtomicTest:
     def clean_cmd(self, cmd, ex=None):
         if self.api == 'mythic':
             if ex == "command_prompt":
-                command_name = "shell"
+                ex = "shell"
             elif ex == "powershell":
-                command_name = "powershell"
-        ex = ex
+                ex = "powershell"
+
         # Clean powershell
         cmd = cmd.replace('exit 1', 'echo \'Test Failed\'')
         cmd = cmd.replace('exit /b 1', 'echo "Test Failed"')
+        cmd = cmd.replace('exit 0', 'echo "Test Passed"')
         # Kinda a hack, for some reason mythic doesnt return output for "powershell cmd /c <cmd>", so run it through "shell"
         if 'cmd /c' in cmd:
             ex = 'shell'
             cmd = cmd[cmd.find('cmd /c')+6:]
 
         cmd = self.strip_args(cmd)
+        # Replace defaults - if exist
+        cmd = cmd.replace('PathToAtomicsFolder', self.atomics_folder)
         return cmd, ex
+
+    # YAML has args in the following format #{ARG}
+    # Remove them in the command to run and replace with the argument in self.args
+    def strip_args(self, cmd):
+        # Find all arguments in the yaml
+        arguments = re.findall(r"\#{.*?}", cmd)
+        for arg in arguments:
+            # Get the value inside #{} to use as key
+            a = ''.join(c for c in arg if c not in '#{}')
+            # Get the default value of the argument
+            cmd = cmd.replace(arg, self.args.get(a).get('default'))
+        return cmd
 
     # Checks the prereqs, returns an error
     async def check_prereqs(self):
@@ -79,7 +94,7 @@ class AtomicTest:
             ex = self.dependency_executor
 
             # Clean and execute prereqtest
-            cmd = d['prereq_command'].replace('exit 0', 'echo "Test Passed"')
+            cmd = d['prereq_command']
             cmd, ex = self.clean_cmd(cmd, ex)
             output = await self.execute_task(ex, cmd, self.callback_id)
 
@@ -110,21 +125,18 @@ class AtomicTest:
     async def run_executor(self):
         # Run command
         cmd = self.executor['command']
-        cmd, _ = self.clean_cmd(cmd)
-        await self.execute_task(self.executor['name'], cmd, self.callback_id)
+        cmd, ex = self.clean_cmd(cmd, self.executor['name'])
+        await self.execute_task(ex, cmd, self.callback_id)
         # Run cleanup_command if applicable
         if 'cleanup_command' in self.executor:
             cmd = self.executor['cleanup_command']
-            cmd, _ = self.clean_cmd(cmd)
-            await self.execute_task(self.executor['name'], cmd, self.callback_id)
+            cmd, ex = self.clean_cmd(cmd, ex)
+            await self.execute_task(ex, cmd, self.callback_id)
 
     # Note for future self, this will give a timestamp for logging
     async def execute_task(self, ex_technique, parameters, callback_id, timeout=None):
         timeout = self.timeout if timeout is None else timeout
         command_name = ex_technique
-        print('*' * 20)
-        print(parameters)
-        print('*' * 20)
 
         # Create the task
         try:
@@ -146,20 +158,6 @@ class AtomicTest:
 
         except Exception as e:
             print(f"Got an exception trying to issue task: {command_name} {parameters} {str(e)}")
-
-    # YAML has args in the following format #{ARG}
-    # Remove them in the command to run and replace with the argument in self.args
-    def strip_args(self, cmd):
-        # Find all arguments in the yaml
-        arguments = re.findall(r"\#{.*?}", cmd)
-        for arg in arguments:
-            # Get the value inside #{} to use as key
-            a = ''.join(c for c in arg if c not in '#{}')
-            # Get the default value of the argument
-            cmd = cmd.replace(arg, self.args.get(a).get('default'))
-            # Replace defaults - if exist
-            cmd = cmd.replace('PathToAtomicsFolder', self.atomics_folder)
-        return cmd
 
     # Some atomic prereqs assume winget is installed but don't have a backup if it isnt
     # So try to install it first :)
