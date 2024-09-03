@@ -1,4 +1,6 @@
 import argparse
+import json
+import logs
 from mythic import mythic
 import re
 import sys
@@ -6,12 +8,13 @@ import yaml
 
 class Atomic:
     # Note: callback_id=None, if using API that does not have callbacks, needs to handle not passing anything in
-    def __init__(self, file, api, api_instance, timeout, callback_id=None):
+    def __init__(self, file, api, api_instance, timeout, logfile, callback_id=None):
         self.api = api
         self.api_instance = api_instance
         self.file = file
         self.timeout = timeout
         self.callback_id = callback_id
+        self.logger = logs.Logger(logfile)
 
         self.parse_yaml()
 
@@ -24,10 +27,10 @@ class Atomic:
 
         self.attack_technique = self.yaml['attack_technique']
         self.display_name = self.yaml['display_name']
-        self.tests = [AtomicTest(dict(x), self.api, self.api_instance, self.timeout, self.callback_id) for x in self.yaml['atomic_tests']] # sick list comprension
+        self.tests = [AtomicTest(dict(x), self.api, self.api_instance, self.timeout, self.logger, self.callback_id) for x in self.yaml['atomic_tests']] # sick list comprehension
 
 class AtomicTest:
-    def __init__(self, test, api, api_instance, timeout, callback_id=None):
+    def __init__(self, test, api, api_instance, timeout, logger, callback_id=None):
         self.api = api
         self.api_instance = api_instance
         self.atomics_folder = 'C:\\temp\\ART'
@@ -41,19 +44,40 @@ class AtomicTest:
         self.executor = test.get('executor', {})
         self.timeout = timeout
         self.callback_id = callback_id
+        self.logger = logger
+
+    # Makes the dict
+    def write_log(self, command, timestamp, status, api, name, guid, desc, platform, ex, timeout, callback_id, output):
+        data = [
+            {
+                'command':command, 
+                'timestamp':timestamp,
+                'status':status,
+                'api':api,
+                'name':name,
+                'GUID':guid,
+                'description':desc, 
+                'platform':platform,
+                'executor':ex,
+                'timeout':timeout,
+                'callback_id':callback_id,
+                'output':output
+            }
+        ]
+        self.logger.log(data)
 
     def print_args(self):
         print('Input Arguments')
         for arg, value in self.args.items():
             print(f' {arg}:\n\t{value['description']}\n\t{value['default']}')
 
-        """
-        ART will check if a file exists in some prereqs by running something similar to `if (Test-Path "#{file}") {exit 0} else {exit 1}`.
-        This doesn't really work with C2 tasking, so replace it with "echo Test Passed" and "echo Test Failed".
-        Process arguments from the yaml
+    """
+    ART will check if a file exists in some prereqs by running something similar to `if (Test-Path "#{file}") {exit 0} else {exit 1}`.
+    This doesn't really work with C2 tasking, so replace it with "echo Test Passed" and "echo Test Failed".
+    Process arguments from the yaml
 
-        Returns the new command (string) and updated executor (string)
-        """
+    Returns the new command (string) and updated executor (string)
+    """
     def clean_cmd(self, cmd, ex=None):
         if self.api == 'mythic':
             if ex == "command_prompt":
@@ -153,6 +177,8 @@ class AtomicTest:
             output = await mythic.waitfor_for_task_output(
                 mythic=self.api_instance, task_display_id=task["display_id"]        )
             output = output.decode('utf-8')
+            print(task.keys())
+            self.write_log(task['original_params'], task['timestamp'], task['status'], self.api, self.name, self.guid, self.description, self.platforms, command_name, self.timeout, self.callback_id, output)
             print(f"Got output:\n{"-" * 20}\n{output}")
             return output
 

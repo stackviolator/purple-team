@@ -33,6 +33,7 @@ async def main():
     api_instance = None
     HOSTNAME = "GORILLA-DC01-2022"
     TIMEOUT = 60
+    LOGFILE = "./logs.csv" # TODO take as param or default to time?
 
     """ SETUP """
     callback_id = -1
@@ -55,11 +56,20 @@ async def main():
         sys.exit(-1)
 
     # Define atomics object
-    a = Atomic("atomics/T1003.001.yaml", API, api_instance, TIMEOUT, callback_id)
-    # TODO uncomment later :) # await a.tests[0].install_winget()
+    a = Atomic("atomics/T1003.001.yaml", API, api_instance, TIMEOUT, LOGFILE, callback_id)
+    # TODO: uncomment later :) await a.tests[0].install_winget()
     """ SETUP """
 
     """ TESTING """
+    data = [
+        {'command': 'ls balls', 'timestamp': 'time o clock', 'status': 'its good!', 'api':'mythic', 'name':'test', 'GUID':'balls', 'description':'test', 'platform':'leapfrog plsu', 'executor':'shell', 'timeout':'o', 'callback_id':'1'}
+    ]
+    t = a.tests[0]
+    err = await t.check_prereqs()
+    if err is None:
+        await t.run_executor()
+    
+
     # Atomic Tests
     if sys.argv[-1] == '-t':
         for i, t in enumerate(a.tests):
