@@ -26,5 +26,7 @@
 
 9. Keep notes of if some tests/ GUIDs are associated with an APT
 
+10. better logic in prereq command function so im not repeating myself
+
 ### Issues
 - Evasive testing - i dont have mcuh and my infra sucks lol

@@ -1,32 +1,11 @@
 from Atomic import Atomic
 import argparse
 import asyncio
+from Executable import *
 import glob
 from mythic import mythic
 import sys
 import yaml
-
-async def login(username, password):
-    return await mythic.login(
-            username=username,
-            password=password,
-            server_ip="localhost",
-            server_port=7443,
-            timeout=-1
-        )
-
-# Update callback info, could be useful but was using as a POC
-async def update_callback(mythic_instance):
-    await mythic.update_callback(
-        mythic=mythic_instance,
-        callback_display_id=7,
-        description="Updated from API",
-        locked=True,
-        domain="ludus.local",
-        integrity_level=3,
-        host="lab-dc",
-        user="domainadmin"
-    )
 
 async def main():
     api_instance = None
@@ -42,33 +21,25 @@ async def main():
     parser.add_argument('-w', '--winget', help='check and install winget', default=False, const=True, nargs='?')
     args = parser.parse_args()
 
-    """ SETUP """
     callback_id = -1
     if args.api == "mythic":
         # Login :)
-        api_instance = await login(args.username, args.password)
+        api_instance = IMythic("C:\\temp\\ART", args.log_file)
+        await api_instance.login(args.username, args.password)
 
         # Get the callback ID
-        callbacks = await mythic.get_all_active_callbacks(mythic=api_instance)
-        for c in callbacks:
-            if c['host'] == args.hostname:
-                callback_id = c['display_id']
+        callback_id = await api_instance.get_callback(args.hostname)
         if callback_id == -1:
-            print(f'[-] Failed to get callback on host: {args.hostname}')
-            sys.exit(-1)
-
-    # Check if the API Instance exists
-    if api_instance is None:
-        print(f'[-] API ({args.api}) Instance is None')
-        sys.exit(-1)
+            raise Exception(f'[-] Failed to get callback on host: {args.hostname}')
 
     # Define the atomics objects
     for file in glob.glob(args.atomic_file):
-        a = Atomic(file, args.api, api_instance, args.timeout, args.log_file, callback_id)
+        a = Atomic(file, api_instance, args.timeout, args.log_file, callback_id)
 
         if args.winget:
-            await a.tests[0].install_winget()
-        """ SETUP """
+            pass
+            # TODO this is not part of the api_instance
+            # await a.tests[0].install_winget()
 
         # Atomic Tests
         for i, t in enumerate(a.tests):
