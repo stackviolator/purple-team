@@ -91,5 +91,5 @@ class AtomicTest:
         if 'cleanup_command' in self.executor:
             cleanup_cmd = Command(self.executor["name"], self.executor["cleanup_command"], self.name, self.guid, self.description, self.platforms, self.timeout, self.args)
             self.api_instance.clean_cmd(cleanup_cmd)
-            print(f"[+] Cleaning up with {cleanup_cmd.ex_technique} {cleanup_cmd.parameters}")
+            print(f"[+] Cleaning up with '{cleanup_cmd.ex_technique} {cleanup_cmd.parameters}'")
             await self.api_instance.execute_task(cleanup_cmd)

@@ -2,9 +2,11 @@
 Interface for defining an executable API
 """
 from abc import ABC, abstractmethod
+from Command import Command
+import logs
 from mythic import mythic
 import re
-import logs
+import sys
 
 class Executable(ABC):
     @abstractmethod
@@ -42,10 +44,11 @@ class Executable(ABC):
         pass
 
 class IMythic(Executable):
-    def __init__(self, atomics_folder, logfile):
+    def __init__(self, atomics_folder, logfile, binary_path):
         self.api = "Mythic"
         self.atomics_folder = atomics_folder
         self.logger = logs.Logger(logfile)
+        self.binary_path = binary_path
 
     # Login
     async def login(self, username, password):
@@ -59,19 +62,134 @@ class IMythic(Executable):
         if self.api_instance is None:
             raise Exception(f"Could not login to Mythic at {server_ip}:{server_port} with {username}:{password}")
 
-    # Update callback info
-    # TODO, use this for callback management
-    async def update_callback(self, mythic_instance):
+    # Update callback info to reflect health and hierarchical status (parent or child)
+    async def update_all_callback_health(self):
+        # Get all callbacks
+        callbacks = await mythic.get_all_active_callbacks(mythic=self.api_instance)
+
+        for c in callbacks:
+            # Get health status
+            health = await self.check_beacon_health(c['display_id'])
+            # Update callback
+            await mythic.update_callback(
+                mythic=self.api_instance,
+                callback_display_id=c['display_id'],
+                description=f"Parent Callback - {health}" if c['display_id'] == self.parent_callback_id else f"Child Callback - {health}" if c['display_id'] == self.child_callback_id else f"Standby Callback - {health}", # le epic chained ternary operator
+                locked=True,
+                domain=c['domain'],
+                integrity_level=c['integrity_level'],
+                host=c['host'],
+                user=c['user']
+            )
+            # If the child is dead, spawn a new one
+            if c['display_id'] == self.child_callback_id and "Dead" in health:
+                print("[-] Dead child beacon found, spawning new beacon...")
+                await self.spawn_beacon(self.binary_path)
+                await self.get_child_callback(c['host'], 0)
+                # TODO add this callback to the list so it keep iterating
+                t_callbacks = await mythic.get_all_active_callbacks(mythic=self.api_instance)
+                callbacks.append(t_callbacks[-1])
+
+    async def update_callback_health(self, display_id, description):
         await mythic.update_callback(
-            mythic=mythic_instance,
-            callback_display_id=7,
-            description="Updated from API",
+            mythic=self.api_instance,
+            callback_display_id=c['display_id'],
+            description=description,
             locked=True,
-            domain="ludus.local",
-            integrity_level=3,
-            host="lab-dc",
-            user="domainadmin"
+            domain=c['domain'],
+            integrity_level=c['integrity_level'],
+            host=c['host'],
+            user=c['user']
         )
+
+    # Used for a post-test check
+    async def manage_beacon_health(self, hostname):
+        print(f"[*] Checking beacon health...")
+        # Get all callbacks
+        callbacks = await mythic.get_all_active_callbacks(mythic=self.api_instance)
+        # Get list of living standby callbacks
+        standbys = [x for x in callbacks if "Standby Callback - Alive" in x['description']] # le epic list comprehension - epic python dev
+
+        # Test the child
+        health = await self.check_beacon_health(self.child_callback_id)
+
+        if health == "Dead":
+            print(f"[-] Child appears dead, checking for standby beacons..")
+            # Update old child to dead
+            await mythic.update_callback(
+                mythic=self.api_instance,
+                callback_display_id=self.child_callback_id,
+                description="Child Callback - Dead",
+            )
+            if len(standbys) >= 1:
+                new_child = standbys[-1]
+                print(f"[+] Assigning callback ID: {standbys[-1]['display_id']} to child beacon")
+                # Update standby to become the new child
+                self.child_callback_id = new_child['display_id']
+                await mythic.update_callback(
+                    mythic=self.api_instance,
+                    callback_display_id=new_child['display_id'],
+                    description="Child Callback - Alive",
+                )
+
+            # If list is empty, spawn a new beacon 
+            if len(standbys) < 1:
+                print("[-] No standby beacons found, attempting to spawn a new child beacon...")
+                try:
+                    # will spawn a beacon and update self variables
+                    await self.get_child_callback(hostname, 0)
+                    # Test health of the new child
+                    health = await self.check_beacon_health(self.child_callback_id)
+                    if health != "Alive":
+                        print(f"[-] Child beacon is dead, checking health of parent...")
+                    else:
+                        return
+
+                except Exception as e:
+                    print(f"[-] Could not spawn a child beacon, checking health of parent...")
+                    print(e)
+
+        else:
+            print(f"[+] Child beacon healthy")
+
+        # Check the health of the parent
+        health = await self.check_beacon_health(self.parent_callback_id)
+        if health == "Alive":
+            print(f"[+] Parent beacon healthy")
+        else:
+            print(f"[-] Parent beacon dead, likely caught")
+            raise Exception("Parent beacon dead")
+
+    # TODO this only works for windows 
+    # Runs test, returns "Alive" if the output succeeded
+    # Used for a single beacon
+    async def check_beacon_health(self, display_id):
+        command = Command('powershell', 'echo "Test Passed"', 'Windows Beacon Health Check', 'None', 'Windows Beacon Health Check', ['windows'], 20, '') # TODO, this timeout should be dynamic
+        output = 'Test Failed'
+        try:
+            task = await mythic.issue_task(
+                mythic=self.api_instance,
+                command_name=command.ex_technique,
+                parameters=command.parameters,
+                callback_display_id=display_id,
+                timeout=command.timeout,
+                wait_for_complete=True,
+            )
+            print(f"[*] Issued a task: '{task['command_name']} {task['original_params'].strip('\n')}' to callback ID {display_id}")
+
+            output = await mythic.waitfor_for_task_output(
+                mythic=self.api_instance, task_display_id=task["display_id"]        )
+            output = output.decode('utf-8')
+            self.log_write(task['original_params'], task['timestamp'], task['status'], "mythic", command.name, command.guid, command.description, command.platforms, command.ex_technique, command.timeout, self.child_callback_id, output)
+            print(f"[*] Got output:\n{"-" * 20}\n{output}\n{"-"*20}")
+
+        except Exception as e:
+            if 'command_name' in str(e):
+                e = "Task timed out"
+            self.log_error("mythic", command.name, command.guid, command.description, command.platforms, command.timeout, self.child_callback_id, str(e))
+            print(f"[-] Got an exception trying to issue task: {command.ex_technique} {command.parameters} {str(e)}")
+
+        return 'Alive' if 'Test Passed' in output else 'Dead'
 
     # Get the callback ID
     # TODO possibly change this to get all backs?
@@ -83,6 +201,77 @@ class IMythic(Executable):
         self.parent_callback_id = callback_id
         self.child_callback_id = callback_id
         return callback_id
+
+    async def get_parent_callback(self, hostname):
+        # Get all callback
+        callbacks = await mythic.get_all_active_callbacks(mythic=self.api_instance)
+
+        # If there are no callbacks, exit with error
+        if len(callbacks) == 0:
+            raise Exception(f"No callbacks found on server")
+
+        # Get first ID, set it to the parent, and return
+        c_id = callbacks[0]['display_id']
+        print(f"[+] Got parent callback at ID: {c_id}")
+        self.parent_callback_id = c_id
+        return c_id
+
+    # Takes in an int (retry) for max retries of recursive loop
+    # Will spawn a new child beacon if none is found
+    async def get_child_callback(self, hostname, retry):
+        retry = retry if retry >= 1 else 0
+
+        if retry == 5:
+            raise Exception("Could not spawn child process")
+
+        # Get all callbacks, remove any dead callbacks
+        callbacks = await mythic.get_all_active_callbacks(mythic=self.api_instance)
+        new_cid = callbacks[-1]['display_id'] + 1
+        # lambda function to remove any dead callbacks based on the description
+        condition = lambda x: "Dead" in x['description']
+        callbacks = list(filter(lambda x: not condition(x), callbacks)) # le epic lambda function
+
+        # If are no callbacks, exit with an error
+        if len(callbacks) == 0:
+            raise Exception(f"No callbacks found on server")
+
+        # If there is only one, spawn a new callback, recursively call method
+        if len(callbacks) == 1:
+            print("[-] No child beacon found, spawning new beacon...")
+            self.child_callback_id = self.parent_callback_id
+            await self.spawn_beacon(self.binary_path)
+            await mythic.update_callback(
+                mythic=self.api_instance,
+                callback_display_id=new_cid,
+                description="Child Callback - Alive",
+            )
+            retry += 1
+            await self.get_child_callback(hostname, retry)
+
+        # If two or more callbacks, set the child callback id to the last callback in the list
+        if len(callbacks) >= 2:
+            self.child_callback_id = callbacks[-1]['display_id']
+            print(f"[+] Got child callback at ID: {self.child_callback_id}")
+            return
+
+    async def spawn_beacon(self, binary_path):
+        command = Command('shell', binary_path, 'Spawn new beacon', '00000', 'Spawn new beacon', ['windows'], 10, '')
+        try:
+            task = await mythic.issue_task(
+                mythic=self.api_instance,
+                command_name=command.ex_technique,
+                parameters=command.parameters,
+                callback_display_id=self.parent_callback_id,
+                timeout=command.timeout,
+                wait_for_complete=True,
+            )
+            print(f"[*] Issued a task: '{task['command_name']} {task['original_params'].strip('\n')}' to callback ID {self.child_callback_id}")
+        except Exception as e:
+            # This happens on a timeout, spawning a new beacon never returns, therefore it will always time out
+            if 'command_name' not in str(e):
+                self.log_error("mythic", command.name, command.guid, command.description, command.platforms, command.timeout, self.child_callback_id, str(e))
+                print(f"[-] Got an exception trying to spawn new beacon: {command.ex_technique} {command.parameters} {str(e)}")
+
 
     async def execute_task(self, command):
         # Create the task
@@ -105,6 +294,8 @@ class IMythic(Executable):
             return output
 
         except Exception as e:
+            if 'command_name' in str(e):
+                e = "Task timed out"
             self.log_error("mythic", command.name, command.guid, command.description, command.platforms, command.timeout, self.child_callback_id, str(e))
             print(f"[-] Got an exception trying to issue task: {command.ex_technique} {command.parameters} {str(e)}")
 

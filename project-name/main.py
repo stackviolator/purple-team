@@ -7,6 +7,8 @@ from mythic import mythic
 import sys
 import yaml
 
+import time # TODO remove after testing
+
 async def main():
     api_instance = None
 
@@ -23,22 +25,20 @@ async def main():
 
     callback_id = -1
     if args.api == "mythic":
-        # Login :)
-        api_instance = IMythic("C:\\temp\\ART", args.log_file)
+        # Login and get setup callbacks:)
+        api_instance = IMythic("C:\\temp\\ART", args.log_file, "C:\\Users\\domainadmin\\Desktop\\apollo.exe")
         await api_instance.login(args.username, args.password)
-
-        # Get the callback ID
-        callback_id = await api_instance.get_callback(args.hostname)
-        if callback_id == -1:
-            raise Exception(f'[-] Failed to get callback on host: {args.hostname}')
+        await api_instance.get_parent_callback(args.hostname)
+        await api_instance.get_child_callback(args.hostname, 0)
+        await api_instance.update_all_callback_health()
 
     # Define the atomics objects
     for file in glob.glob(args.atomic_file):
-        a = Atomic(file, api_instance, args.timeout, args.log_file, callback_id)
+        a = Atomic(file, api_instance, args.timeout, args.log_file, api_instance.parent_callback_id)
 
         if args.winget:
             pass
-            # TODO this is not part of the api_instance
+            # TODO this is now part of the api_instance
             # await a.tests[0].install_winget()
 
         # Atomic Tests
@@ -48,6 +48,7 @@ async def main():
                 err = await t.check_prereqs()
                 if err is None:
                     await t.run_executor()
+            await api_instance.manage_beacon_health(args.hostname)
 
 if __name__ == "__main__":
     asyncio.run(main())
