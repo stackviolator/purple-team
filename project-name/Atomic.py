@@ -9,7 +9,6 @@ import yaml
 DISALLOWED_EXECUTORS = ['manual']
 
 class Atomic:
-    # Note: callback_id=None, if using API that does not have callbacks, needs to handle not passing anything in
     def __init__(self, file, api_instance, timeout, logfile, callback_id=None):
         self.api_instance = api_instance
         self.file = file
@@ -75,7 +74,7 @@ class AtomicTest:
             ex = self.dependency_executor
             prereq_cmd = Command(self.dependency_executor, d['prereq_command'], self.name, self.guid, self.description, self.platforms, self.timeout, self.args)
 
-            # Clean and execute prereqtest
+            # Clean and execute prereq cmd
             self.api_instance.clean_cmd(prereq_cmd)
             output = await self.api_instance.execute_task(prereq_cmd)
 
