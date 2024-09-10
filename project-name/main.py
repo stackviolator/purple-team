@@ -7,8 +7,6 @@ from mythic import mythic
 import sys
 import yaml
 
-import time # TODO remove after testing
-
 async def main():
     api_instance = None
 
@@ -20,17 +18,20 @@ async def main():
     parser.add_argument('-t ', '--timeout', type=int, help='timeout for each task to callback', default=300)
     parser.add_argument('-lf ', '--log-file', type=str, help='file to output logs', default='logs/logs.csv')
     parser.add_argument('-f ', '--atomic-file', type=str, help='run atomics from specific yaml file', default='./atomics/T*.yaml')
+    parser.add_argument('-b ', '--binary-path', type=str, help='path to the binary on the target to spawn a new process', default='%USERPROFILE%\\Desktop\\apollo.exe')
     parser.add_argument('-w', '--winget', help='check and install winget', default=False, const=True, nargs='?')
+    parser.add_argument('--skip-health', help='Skip beacon health checks, useful for debugging', default=False, const=True, nargs='?')
     args = parser.parse_args()
 
     callback_id = -1
     if args.api == "mythic":
         # Login and get setup callbacks:)
-        api_instance = IMythic("C:\\temp\\ART", args.log_file, "C:\\Users\\domainadmin\\Desktop\\apollo.exe")
+        api_instance = IMythic("C:\\temp\\ART", args.log_file, args.binary_path)
         await api_instance.login(args.username, args.password)
         await api_instance.get_parent_callback(args.hostname)
         await api_instance.get_child_callback(args.hostname, 0)
-        await api_instance.update_all_callback_health()
+        if not args.skip_health:
+            await api_instance.update_all_callback_health()
 
     # Define the atomics objects
     for file in glob.glob(args.atomic_file):
@@ -43,12 +44,16 @@ async def main():
 
         # Atomic Tests
         for i, t in enumerate(a.tests):
-            print(f"{i} -- {t.name}")
-            if t.executor['name'] != "manual":
-                err = await t.check_prereqs()
-                if err is None:
-                    await t.run_executor()
-            await api_instance.manage_beacon_health(args.hostname)
+            print(f"[*] Starting execution for task {t.name}")
+            try:
+                await t.check_prereqs()
+                await t.run_executor()
+            except Exception as e:
+                print(f'[-] Task failed with exception -- \'{e}\'')
+                print(f'[-] Skipping task \'{t.name}\'...')
+            if not args.skip_health:
+                await api_instance.manage_beacon_health(args.hostname)
+            print("") # Space out the output per test
 
 if __name__ == "__main__":
     asyncio.run(main())

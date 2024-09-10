@@ -186,21 +186,37 @@ class IMythic(Executable):
         except Exception as e:
             if 'command_name' in str(e):
                 e = "Task timed out"
-            self.log_error("mythic", command.name, command.guid, command.description, command.platforms, command.timeout, self.child_callback_id, str(e))
+            self.log_error(command.name, command.guid, command.description, command.platforms, command.timeout, self.child_callback_id, str(e))
             print(f"[-] Got an exception trying to issue task: {command.ex_technique} {command.parameters} {str(e)}")
 
         return 'Alive' if 'Test Passed' in output else 'Dead'
 
-    # Get the callback ID
-    # TODO possibly change this to get all backs?
-    async def get_callback(self, hostname):
+    async def check_elevation(self, elevation_required):
+        # Check the child beacon
+        try:
+            callback = await self.get_callback(self.child_callback_id)
+            if elevation_required and callback['integrity_level'] < 3:
+                return False
+            return True
+        except Exception as e:
+            print(f"Error geting beacon callback for check_elevation -- {e}")
+
+    async def check_platforms(self, platforms):
+        try:
+            callback = await self.get_callback(self.child_callback_id)
+            if callback['payload']['os'].lower() not in platforms:
+                return False
+            return True
+        except Exception as e:
+            print(f"Error geting beacon callback for check_platforms -- {e}")
+
+    # Get the callback ID, returns false if nothing found
+    async def get_callback(self, display_id):
         callbacks = await mythic.get_all_active_callbacks(mythic=self.api_instance)
         for c in callbacks:
-            if c['host'] == hostname:
-                callback_id = c['display_id']
-        self.parent_callback_id = callback_id
-        self.child_callback_id = callback_id
-        return callback_id
+            if c['display_id'] == display_id:
+                return c
+        raise Exception(f"No callback with ID: {display_id}")
 
     async def get_parent_callback(self, hostname):
         # Get all callback
@@ -269,7 +285,7 @@ class IMythic(Executable):
         except Exception as e:
             # This happens on a timeout, spawning a new beacon never returns, therefore it will always time out
             if 'command_name' not in str(e):
-                self.log_error("mythic", command.name, command.guid, command.description, command.platforms, command.timeout, self.child_callback_id, str(e))
+                self.log_error(command.name, command.guid, command.description, command.platforms, command.timeout, self.child_callback_id, str(e))
                 print(f"[-] Got an exception trying to spawn new beacon: {command.ex_technique} {command.parameters} {str(e)}")
 
 
@@ -296,7 +312,7 @@ class IMythic(Executable):
         except Exception as e:
             if 'command_name' in str(e):
                 e = "Task timed out"
-            self.log_error("mythic", command.name, command.guid, command.description, command.platforms, command.timeout, self.child_callback_id, str(e))
+            self.log_error(command.name, command.guid, command.description, command.platforms, command.timeout, self.child_callback_id, str(e))
             print(f"[-] Got an exception trying to issue task: {command.ex_technique} {command.parameters} {str(e)}")
 
 
@@ -350,13 +366,13 @@ class IMythic(Executable):
         self.logger.log(data)
 
     # Used to log an error in CSV, notably, 'status' is "failed"
-    def log_error(self, api, name, guid, desc, platforms, timeout, callback_id, err_str):
+    def log_error(self, name, guid, desc, platforms, timeout, callback_id, err_str):
         data = [
             {
                 'command':"None", 
                 'timestamp':"None",
                 'status':"failed",
-                'api':api,
+                'api':"mythic",
                 'name':name,
                 'GUID':guid,
                 'description':desc, 
