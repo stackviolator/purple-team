@@ -157,7 +157,7 @@ class IMythic(Executable):
         if health == "Alive":
             print(f"[+] Parent beacon healthy")
         else:
-            print(f"[-] Parent beacon dead, likely caught")
+            print(f"[-] Parent beacon dead, likely caught by blue team")
             raise Exception("Parent beacon dead")
 
     # TODO this only works for windows 
@@ -245,7 +245,7 @@ class IMythic(Executable):
         new_cid = callbacks[-1]['display_id'] + 1
         # lambda function to remove any dead callbacks based on the description
         condition = lambda x: "Dead" in x['description']
-        callbacks = list(filter(lambda x: not condition(x), callbacks)) # le epic lambda function
+        callbacks = list(filter(lambda x: not condition(x), callbacks)) # le epic lambda function, this is readable
 
         # If are no callbacks, exit with an error
         if len(callbacks) == 0:

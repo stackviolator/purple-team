@@ -51,8 +51,22 @@ async def main():
             except Exception as e:
                 print(f'[-] Task failed with exception -- \'{e}\'')
                 print(f'[-] Skipping task \'{t.name}\'...')
+                print("")
+                continue
             if not args.skip_health:
-                await api_instance.manage_beacon_health(args.hostname)
+                try:
+                    await api_instance.manage_beacon_health(args.hostname)
+                except Exception as e:
+                    # Can prob put this into Executable.py
+                    if e == 'Parent beacon died':
+                        for i in range(5):
+                            print(f"[+] Dead parent beacon found, waiting {args.timeout} then trying again...")
+                            try:
+                                health = api_instance.check_beacon_health(api_instance.parent_callback_id)
+                                if health == "Alive":
+                                    break
+                            except Exception as e:
+                                pass
             print("") # Space out the output per test
 
 if __name__ == "__main__":

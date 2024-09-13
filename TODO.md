@@ -3,6 +3,9 @@
 
 - If a dead beacon is detected, log the previous command that likely killed it
 
+- Add error handling for dead parent beaconA
+	- Probably just try to repeatedly health check the parent beacon for a retry timer, if it comes back up, rerun all health checks to recover
+
 ### Medium
 - Just run cleanup commands (specify by GUID maybe) (in case a beacon dies when dumping lsass or something)
 
