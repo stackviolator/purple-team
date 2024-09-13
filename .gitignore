@@ -5,4 +5,4 @@ purple-team/*
 logs.csv
 project-name/__pycache__
 project-name/__pycache__/*
-logs/*.csv
+logs/*
