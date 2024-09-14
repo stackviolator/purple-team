@@ -29,7 +29,11 @@ async def main():
         api_instance = IMythic("C:\\temp\\ART", args.log_file, args.binary_path)
         await api_instance.login(args.username, args.password)
         await api_instance.get_parent_callback(args.hostname)
-        await api_instance.get_child_callback(args.hostname, 0)
+        try:
+            await api_instance.get_child_callback(args.hostname, 0)
+        except Exception as e:
+            print("[-] Could not spawn child process")
+            sys.exit(1)
         if not args.skip_health:
             await api_instance.update_all_callback_health()
 
@@ -38,9 +42,7 @@ async def main():
         a = Atomic(file, api_instance, args.timeout, args.log_file, api_instance.parent_callback_id)
 
         if args.winget:
-            pass
-            # TODO this is now part of the api_instance
-            # await a.tests[0].install_winget()
+            await api_instance.install_winget()
 
         # Atomic Tests
         for i, t in enumerate(a.tests):

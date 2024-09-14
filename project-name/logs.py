@@ -16,7 +16,7 @@ class Logger:
         # Open file in write mode if it doesn't exist, otherwise in append mode
         mode = 'a' if file_exists else 'w'
         try:
-            with open(self.filepath, mode, newline='') as csvfile:
+            with open(self.filepath, mode, newline='', encoding='utf-8') as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=self.fieldnames)
                 # Write header if the file was just created
                 if not file_exists:

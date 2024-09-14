@@ -175,13 +175,17 @@ class IMythic(Executable):
                 timeout=command.timeout,
                 wait_for_complete=True,
             )
-            print(f"[*] Issued a task: '{task['command_name']} {task['original_params'].strip('\n')}' to callback ID {display_id}")
+            # Idk some version of python doesnt support this in a format string, idk
+            p = task['original_params'].strip('\n')
+            print(f"[*] Issued a task: '{task['command_name']} {p}' to callback ID {display_id}")
+
 
             output = await mythic.waitfor_for_task_output(
                 mythic=self.api_instance, task_display_id=task["display_id"]        )
             output = output.decode('utf-8')
             self.log_write(task['original_params'], task['timestamp'], task['status'], "mythic", command.name, command.guid, command.description, command.platforms, command.ex_technique, command.timeout, self.child_callback_id, output)
-            print(f"[*] Got output:\n{"-" * 20}\n{output}\n{"-"*20}")
+            separator  = '-' * 20 # python gets mad if this is in the format string
+            print(f"[*] Got output:\n{separator}\n{output}\n{separator}")
 
         except Exception as e:
             if 'command_name' in str(e):
@@ -281,7 +285,9 @@ class IMythic(Executable):
                 timeout=command.timeout,
                 wait_for_complete=True,
             )
-            print(f"[*] Issued a task: '{task['command_name']} {task['original_params'].strip('\n')}' to callback ID {self.child_callback_id}")
+
+            p = task['original_params'].strip('\n')
+            print(f"[*] Issued a task: '{task['command_name']} {p}' to callback ID {self.child_callback_id}")
         except Exception as e:
             # This happens on a timeout, spawning a new beacon never returns, therefore it will always time out
             if 'command_name' not in str(e):
@@ -300,13 +306,15 @@ class IMythic(Executable):
                 timeout=command.timeout,
                 wait_for_complete=True,
             )
-            print(f"[*] Issued a task: '{task['command_name']} {task['original_params'].strip('\n')}' to callback ID {self.child_callback_id}")
+            p = task['original_params'].strip('\n')
+            print(f"[*] Issued a task: '{task['command_name']} {p}' to callback ID {self.child_callback_id}")
 
             output = await mythic.waitfor_for_task_output(
                 mythic=self.api_instance, task_display_id=task["display_id"]        )
             output = output.decode('utf-8')
             self.log_write(task['original_params'], task['timestamp'], task['status'], "mythic", command.name, command.guid, command.description, command.platforms, command.ex_technique, command.timeout, self.child_callback_id, output)
-            print(f"[*] Got output:\n{"-" * 20}\n{output}\n{"-"*20}")
+            separator = "-" * 20
+            print(f"[*] Got output:\n{separator}\n{output}\n{separator}")
             return output
 
         except Exception as e:
