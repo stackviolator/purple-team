@@ -1,3 +1,4 @@
 mythic
 argparse
 pyyaml
+configparser

@@ -399,7 +399,7 @@ class IMythic(Executable):
     async def install_winget(self):
         print("[*] Checking for winget-cli installation")
         # Check if winget is installed
-        cmd = Command('powershell', 'if (Get-Command winget -ErrorAction SilentlyContinue) { echo "Test Passed" } else { echo "Test Failed" }', "Test for Install Winget", "None", "Test for Install Winget", "Windows", 120)
+        cmd = Command('powershell', 'if (Get-Command winget -ErrorAction SilentlyContinue) { echo "Test Passed" } else { echo "Test Failed" }', "Test for Install Winget", "None", "Test for Install Winget", "Windows", 120, "")
         self.clean_cmd(cmd)
         output = await self.execute_task(cmd)
         if "Test Passed" not in output:

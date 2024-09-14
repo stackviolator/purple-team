@@ -1,6 +1,7 @@
 from Atomic import Atomic
 import argparse
 import asyncio
+import configparser
 from Executable import *
 import glob
 from mythic import mythic
@@ -11,37 +12,43 @@ async def main():
     api_instance = None
 
     parser = argparse.ArgumentParser(description="Atomic testing through mythic")
-    parser.add_argument('-u', '--username', type=str, help='username for the mythic user', required=True)
-    parser.add_argument('-p', '--password', type=str, help='password for the mythic user', required=True)
-    parser.add_argument('-H', '--hostname', type=str, help='hostname to run the tests on', required=True)
-    parser.add_argument('-a', '--api', type=str, help='api to use for execution', default='mythic')
-    parser.add_argument('-t ', '--timeout', type=int, help='timeout for each task to callback', default=300)
-    parser.add_argument('-lf ', '--log-file', type=str, help='file to output logs', default='logs/logs.csv')
-    parser.add_argument('-f ', '--atomic-file', type=str, help='run atomics from specific yaml file', default='./atomics/T*.yaml')
-    parser.add_argument('-b ', '--binary-path', type=str, help='path to the binary on the target to spawn a new process', default='%USERPROFILE%\\Desktop\\apollo.exe')
-    parser.add_argument('-w', '--winget', help='check and install winget', default=False, const=True, nargs='?')
-    parser.add_argument('--skip-health', help='Skip beacon health checks, useful for debugging', default=False, const=True, nargs='?')
+    parser.add_argument('-f', '--config-file', type=str, help='Config file for the API', required=True)
     args = parser.parse_args()
 
+    config = configparser.ConfigParser()
+    config.read(args.config_file)
+    api_config = config['api']
+    username = api_config["Username"]
+    password = api_config["Password"]
+    domain = api_config["Domain"]
+    hostname = api_config["Hostname"]
+    api = api_config["API"]
+    logfile = api_config["LogFile"]
+    atomicfile = api_config["AtomicFile"]
+    binarypath = api_config["BinaryPath"]
+    timeout = int(api_config["Timeout"])
+    install_winget = api_config.getboolean('InstallWinget')
+    skip_health = api_config.getboolean('SkipHealth')
+
     callback_id = -1
-    if args.api == "mythic":
+    if api == "mythic":
         # Login and get setup callbacks:)
-        api_instance = IMythic("C:\\temp\\ART", args.log_file, args.binary_path)
-        await api_instance.login(args.username, args.password)
-        await api_instance.get_parent_callback(args.hostname)
+        api_instance = IMythic("C:\\temp\\ART", logfile , binarypath)
+        await api_instance.login(username, password)
+        await api_instance.get_parent_callback(hostname)
         try:
-            await api_instance.get_child_callback(args.hostname, 0)
+            await api_instance.get_child_callback(hostname, 0)
         except Exception as e:
             print("[-] Could not spawn child process")
             sys.exit(1)
-        if not args.skip_health:
+        if not skip_health:
             await api_instance.update_all_callback_health()
 
     # Define the atomics objects
-    for file in glob.glob(args.atomic_file):
-        a = Atomic(file, api_instance, args.timeout, args.log_file, api_instance.parent_callback_id)
+    for file in glob.glob(atomicfile):
+        a = Atomic(file, api_instance, timeout, logfile, api_instance.parent_callback_id)
 
-        if args.winget:
+        if install_winget:
             await api_instance.install_winget()
 
         # Atomic Tests
@@ -55,14 +62,14 @@ async def main():
                 print(f'[-] Skipping task \'{t.name}\'...')
                 print("")
                 continue
-            if not args.skip_health:
+            if not skip_health:
                 try:
-                    await api_instance.manage_beacon_health(args.hostname)
+                    await api_instance.manage_beacon_health(hostname)
                 except Exception as e:
                     # Can prob put this into Executable.py
                     if e == 'Parent beacon died':
                         for i in range(5):
-                            print(f"[+] Dead parent beacon found, waiting {args.timeout} then trying again...")
+                            print(f"[+] Dead parent beacon found, waiting {timeout} then trying again...")
                             try:
                                 health = api_instance.check_beacon_health(api_instance.parent_callback_id)
                                 if health == "Alive":
