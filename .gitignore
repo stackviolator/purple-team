@@ -6,4 +6,4 @@ logs.csv
 project-name/__pycache__
 project-name/__pycache__/*
 logs/*
-configs/*dev.cfg
+configs/mythic-dev.cfg
