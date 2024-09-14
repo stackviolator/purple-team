@@ -44,11 +44,12 @@ class Executable(ABC):
         pass
 
 class IMythic(Executable):
-    def __init__(self, atomics_folder, logfile, binary_path):
+    def __init__(self, atomics_folder, logfile, binary_path, execution_config):
         self.api = "Mythic"
         self.atomics_folder = atomics_folder
         self.logger = logs.Logger(logfile)
         self.binary_path = binary_path
+        self.execution_config = execution_config
 
     # Login
     async def login(self, username, password):
@@ -160,10 +161,11 @@ class IMythic(Executable):
             print(f"[-] Parent beacon dead, likely caught by blue team")
             raise Exception("Parent beacon dead")
 
-    # TODO this only works for windows 
+    # TODO this only works for windows
     # Runs test, returns "Alive" if the output succeeded
     # Used for a single beacon
     async def check_beacon_health(self, display_id):
+        # Always use powershell for the health check, powerpick makes it fail too much
         command = Command('powershell', 'echo "Test Passed"', 'Windows Beacon Health Check', 'None', 'Windows Beacon Health Check', ['windows'], 20, '') # TODO, this timeout should be dynamic
         output = 'Test Failed'
         try:
@@ -294,6 +296,22 @@ class IMythic(Executable):
                 self.log_error(command.name, command.guid, command.description, command.platforms, command.timeout, self.child_callback_id, str(e))
                 print(f"[-] Got an exception trying to spawn new beacon: {command.ex_technique} {command.parameters} {str(e)}")
 
+    async def set_beacon_execution_config(self, callback_id):
+        # Set spawnto's
+        command = Command('spawnto_x64', f'{self.execution_config["spawnto_x64"]} """', 'Set spawnto_x64', '0', f"Set spawnto_x64 to {self.execution_config['spawnto_x64']}", ['windows'], 10, '')
+        await self.execute_task_by_callback(command, callback_id)
+        command = Command('spawnto_x86', f'{self.execution_config["spawnto_x86"]} """', 'Set spawnto_x86', '0', f"Set spawnto_x86 to {self.execution_config['spawnto_x86']}", ['windows'], 10, '')
+        await self.execute_task_by_callback(command, callback_id)
+
+        # Set ppid if set
+        if self.execution_config['ppid'] != "None":
+            command = Command('ppid', f'-ppid {self.execution_config["ppid"]}', 'Set ppid', '0', f'Set ppid to {self.execution_config["ppid"]}', ['windows'], 10, '')
+            await self.execute_task_by_callback(command, callback_id)
+
+        # Set injection technique
+        command = Command('set_injection_technique', self.execution_config["injection_technique"], 'Set injection technique', '0', f'Set injection technique to {self.execution_config["injection_technique"]}', ['windows'], 10, '')
+        await self.execute_task_by_callback(command, callback_id)
+
 
     async def execute_task(self, command):
         # Create the task
@@ -323,13 +341,40 @@ class IMythic(Executable):
             self.log_error(command.name, command.guid, command.description, command.platforms, command.timeout, self.child_callback_id, str(e))
             print(f"[-] Got an exception trying to issue task: {command.ex_technique} {command.parameters} {str(e)}")
 
+    async def execute_task_by_callback(self, command, callback_id):
+        # Create the task
+        try:
+            task = await mythic.issue_task(
+                mythic=self.api_instance,
+                command_name=command.ex_technique,
+                parameters=command.parameters,
+                callback_display_id=callback_id,
+                timeout=command.timeout,
+                wait_for_complete=True,
+            )
+            p = task['original_params'].strip('\n')
+            print(f"[*] Issued a task: '{task['command_name']} {p}' to callback ID {callback_id}")
+
+            output = await mythic.waitfor_for_task_output(
+                mythic=self.api_instance, task_display_id=task["display_id"]        )
+            output = output.decode('utf-8')
+            self.log_write(task['original_params'], task['timestamp'], task['status'], "mythic", command.name, command.guid, command.description, command.platforms, command.ex_technique, command.timeout, callback_id, output)
+            separator = "-" * 20
+            print(f"[*] Got output:\n{separator}\n{output}\n{separator}")
+            return output
+
+        except Exception as e:
+            if 'command_name' in str(e):
+                e = "Task timed out"
+            self.log_error(command.name, command.guid, command.description, command.platforms, command.timeout, callback_id, str(e))
+            print(f"[-] Got an exception trying to issue task: {command.ex_technique} {command.parameters} {str(e)}")
 
     # Mythic specific implementation
     def clean_cmd(self, cmd):
         if cmd.ex_technique == "command_prompt":
             cmd.set_ex_technique("shell")
         elif cmd.ex_technique == "powershell":
-            cmd.set_ex_technique("powershell")
+            cmd.set_ex_technique(self.execution_config['Powershell'])
 
         # Clean powershell
         cmd.set_parameters(cmd.parameters.replace('exit 1', 'echo \'Test Failed\''))
@@ -357,13 +402,13 @@ class IMythic(Executable):
     def log_write(self, command, timestamp, status, api, name, guid, desc, platform, ex, timeout, callback_id, output):
         data = [
             {
-                'command':command, 
+                'command':command,
                 'timestamp':timestamp,
                 'status':status,
                 'api':api,
                 'name':name,
                 'GUID':guid,
-                'description':desc, 
+                'description':desc,
                 'platform':platform,
                 'executor':ex,
                 'timeout':timeout,
@@ -377,13 +422,13 @@ class IMythic(Executable):
     def log_error(self, name, guid, desc, platforms, timeout, callback_id, err_str):
         data = [
             {
-                'command':"None", 
+                'command':"None",
                 'timestamp':"None",
                 'status':"failed",
                 'api':"mythic",
                 'name':name,
                 'GUID':guid,
-                'description':desc, 
+                'description':desc,
                 'platform':platforms,
                 'executor':"None",
                 'timeout':timeout,
@@ -399,14 +444,14 @@ class IMythic(Executable):
     async def install_winget(self):
         print("[*] Checking for winget-cli installation")
         # Check if winget is installed
-        cmd = Command('powershell', 'if (Get-Command winget -ErrorAction SilentlyContinue) { echo "Test Passed" } else { echo "Test Failed" }', "Test for Install Winget", "None", "Test for Install Winget", "Windows", 120, "")
+        cmd = Command(self.execution_config['Powershell'], 'if (Get-Command winget -ErrorAction SilentlyContinue) { echo "Test Passed" } else { echo "Test Failed" }', "Test for Install Winget", "None", "Test for Install Winget", "Windows", 120, "")
         self.clean_cmd(cmd)
         output = await self.execute_task(cmd)
         if "Test Passed" not in output:
             print("[-] winget not found. Installing...")
             # Install winget
-            cmd = Command('powershell', 'irm asheroto.com/winget | iex', "Install Winget", "None", "Install Winget", "windows", 120) # taken from https://github.com/asheroto/winget-install
-            cmd, ex = self.clean_cmd(cmd, 'powershell')
+            cmd = Command(self.execution_config['Powershell'], 'irm asheroto.com/winget | iex', "Install Winget", "None", "Install Winget", "windows", 120) # taken from https://github.com/asheroto/winget-install
+            cmd, ex = self.clean_cmd(cmd, self.execution_config['Powershell'])
             output = await self.execute_task(cmd) # big ol timeout since it takes a while to install
             # Le epic recursive loop, surely this wont cause the program to fail if winget cant be installed from the script
             # If Test Passed is never in the output, this will recurse forever, lol

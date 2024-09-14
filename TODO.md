@@ -3,10 +3,7 @@
 
 - If a dead beacon is detected, log the previous command that likely killed it
 
-- Add error handling for dead parent beaconA
-	- Probably just try to repeatedly health check the parent beacon for a retry timer, if it comes back up, rerun all health checks to recover
-
-- UTF-8 Encode CSV logging so it doenst break and die
+- When a beacon is spawned, update its config variables (spawnto), also update parent and child on start
 
 ### Medium
 - Just run cleanup commands (specify by GUID maybe) (in case a beacon dies when dumping lsass or something)
@@ -14,7 +11,6 @@
 - Log the attack type (ex. T1003.001)
 
 - Config file
-
 ### Low
 - Write unit tests or whatever
 

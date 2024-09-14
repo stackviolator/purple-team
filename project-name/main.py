@@ -18,6 +18,10 @@ async def main():
     config = configparser.ConfigParser()
     config.read(args.config_file)
     api_config = config['api']
+    execution_config = config['execution']
+
+    x64 = execution_config['spawnto_x64']
+
     username = api_config["Username"]
     password = api_config["Password"]
     domain = api_config["Domain"]
@@ -25,6 +29,7 @@ async def main():
     api = api_config["API"]
     logfile = api_config["LogFile"]
     atomicfile = api_config["AtomicFile"]
+    atomicpath = api_config["AtomicPath"]
     binarypath = api_config["BinaryPath"]
     timeout = int(api_config["Timeout"])
     install_winget = api_config.getboolean('InstallWinget')
@@ -33,7 +38,7 @@ async def main():
     callback_id = -1
     if api == "mythic":
         # Login and get setup callbacks:)
-        api_instance = IMythic("C:\\temp\\ART", logfile , binarypath)
+        api_instance = IMythic(atomicpath, logfile , binarypath, execution_config)
         await api_instance.login(username, password)
         await api_instance.get_parent_callback(hostname)
         try:
@@ -43,6 +48,11 @@ async def main():
             sys.exit(1)
         if not skip_health:
             await api_instance.update_all_callback_health()
+
+    # Test
+    await api_instance.set_beacon_execution_config(api_instance.parent_callback_id)
+    await api_instance.set_beacon_execution_config(api_instance.child_callback_id)
+    sys.exit(0)
 
     # Define the atomics objects
     for file in glob.glob(atomicfile):
