@@ -44,6 +44,20 @@ class AtomicTest:
         self.timeout = timeout
         self.callback_id = callback_id
 
+    async def run_atomic_test(self):
+        cmd = Command(self.executor["name"], self.executor["command"], self.name, self.guid, self.description, self.platforms, self.timeout, self.args)
+
+        # Run preprocessing
+        self.api_instance.clean_cmd(cmd)
+        self.api_instance.preprocess_cmd(cmd)
+
+        try:
+            await self.check_prereqs()
+            await self.run_executor()
+
+        except Exception as e:
+            raise e
+
     # Checks the prereqs, returns an error
     async def check_prereqs(self):
         # Check if elevation is required
@@ -68,14 +82,17 @@ class AtomicTest:
             err_str = f"FAILED: Test {self.name} has unsupported executor {self.executor['name']}"
             self.api_instance.log_error(self.name, self.guid, self.description, self.platforms, self.timeout, self.api_instance.child_callback_id, err_str)
             raise Exception(f"Unsupported executor \"{self.executor['name']}\" for task {self.name}")
-
+        
         # For each dependency
         for d in self.dependencies:
+            # Pre process command to determine if there is a special execution technique
+
             ex = self.dependency_executor
             prereq_cmd = Command(self.dependency_executor, d['prereq_command'], self.name, self.guid, self.description, self.platforms, self.timeout, self.args)
 
             # Clean and execute prereq cmd
             self.api_instance.clean_cmd(prereq_cmd)
+
             output = await self.api_instance.execute_task(prereq_cmd)
 
             # There is no output, usually this is from a timeout

@@ -19,9 +19,9 @@ async def main():
     config.read(args.config_file)
     api_config = config['api']
     execution_config = config['execution']
+    payload_config = config['payloads']
 
-    x64 = execution_config['spawnto_x64']
-
+    # API Config
     username = api_config["Username"]
     password = api_config["Password"]
     domain = api_config["Domain"]
@@ -35,12 +35,19 @@ async def main():
     install_winget = api_config.getboolean('InstallWinget')
     skip_health = api_config.getboolean('SkipHealth')
 
+    # Execution config
+    set_exec_config = execution_config.getboolean("SetConfig")
+
     callback_id = -1
     if api == "mythic":
         # Login and get setup callbacks:)
-        api_instance = IMythic(atomicpath, logfile , binarypath, execution_config)
+        api_instance = IMythic(atomicpath, logfile , binarypath, execution_config, payload_config)
         await api_instance.login(username, password)
         await api_instance.get_parent_callback(hostname)
+        if set_exec_config:
+            await api_instance.set_beacon_execution_config(api_instance.parent_callback_id)
+            await api_instance.set_beacon_execution_config(api_instance.child_callback_id)
+
         try:
             await api_instance.get_child_callback(hostname, 0)
         except Exception as e:
@@ -48,11 +55,6 @@ async def main():
             sys.exit(1)
         if not skip_health:
             await api_instance.update_all_callback_health()
-
-    # Test
-    await api_instance.set_beacon_execution_config(api_instance.parent_callback_id)
-    await api_instance.set_beacon_execution_config(api_instance.child_callback_id)
-    sys.exit(0)
 
     # Define the atomics objects
     for file in glob.glob(atomicfile):
@@ -65,8 +67,7 @@ async def main():
         for i, t in enumerate(a.tests):
             print(f"[*] Starting execution for task {t.name}")
             try:
-                await t.check_prereqs()
-                await t.run_executor()
+                await t.run_atomic_test()
             except Exception as e:
                 print(f'[-] Task failed with exception -- \'{e}\'')
                 print(f'[-] Skipping task \'{t.name}\'...')

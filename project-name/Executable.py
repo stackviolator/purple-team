@@ -25,6 +25,12 @@ class Executable(ABC):
         pass
 
     """
+    Need to determine if there is a special execution technique assoicated with the given command
+    """
+    @abstractmethod
+    def preprocess_cmd(self):
+        pass
+    """
     ART will check if a file exists in some prereqs by running something similar to `if (Test-Path "#{file}") {exit 0} else {exit 1}`.
     This doesn't really work with C2 tasking, so replace it with "echo Test Passed" and "echo Test Failed".
     Process arguments from the yaml
@@ -44,12 +50,28 @@ class Executable(ABC):
         pass
 
 class IMythic(Executable):
-    def __init__(self, atomics_folder, logfile, binary_path, execution_config):
+    def __init__(self, atomics_folder, logfile, binary_path, execution_config, payload_config):
         self.api = "Mythic"
         self.atomics_folder = atomics_folder
         self.logger = logs.Logger(logfile)
         self.binary_path = binary_path
         self.execution_config = execution_config
+        self.payload_config = payload_config
+        self.pe_whitelist = []
+        self.dotnet_whitelist = []
+        self.powershell_whitelist = []
+        # Get the commands to use special execution on
+        with open(self.payload_config['PEsFile'], 'r') as f:
+            for line in f:
+                self.pe_whitelist.append(line.strip())
+
+        with open(self.payload_config['DotnetsFile'], 'r') as f:
+            for line in f:
+                self.dotnet_whitelist.append(line.strip())
+
+        with open(self.payload_config['PowershellFile'], 'r') as f:
+            for line in f:
+                self.powershell_whitelist.append(line.strip())
 
     # Login
     async def login(self, username, password):
@@ -62,6 +84,8 @@ class IMythic(Executable):
         )
         if self.api_instance is None:
             raise Exception(f"Could not login to Mythic at {server_ip}:{server_port} with {username}:{password}")
+        
+
 
     # Update callback info to reflect health and hierarchical status (parent or child)
     async def update_all_callback_health(self):
@@ -267,6 +291,7 @@ class IMythic(Executable):
                 callback_display_id=new_cid,
                 description="Child Callback - Alive",
             )
+            await self.set_beacon_execution_config(new_cid)
             retry += 1
             await self.get_child_callback(hostname, retry)
 
@@ -290,26 +315,32 @@ class IMythic(Executable):
 
             p = task['original_params'].strip('\n')
             print(f"[*] Issued a task: '{task['command_name']} {p}' to callback ID {self.child_callback_id}")
+
         except Exception as e:
             # This happens on a timeout, spawning a new beacon never returns, therefore it will always time out
-            if 'command_name' not in str(e):
+            if str(e) == "'original_params'":
+                # Get newest callback id and update config
+                callbacks = await mythic.get_all_active_callbacks(mythic=self.api_instance)
+                c_id = callbacks[-1]['display_id']
+            elif 'command_name' not in str(e) or "'original_params'" not in str(e):
                 self.log_error(command.name, command.guid, command.description, command.platforms, command.timeout, self.child_callback_id, str(e))
                 print(f"[-] Got an exception trying to spawn new beacon: {command.ex_technique} {command.parameters} {str(e)}")
 
     async def set_beacon_execution_config(self, callback_id):
+        print(f"[*] Setting execution configuration for callback ID {callback_id}")
         # Set spawnto's
-        command = Command('spawnto_x64', f'{self.execution_config["spawnto_x64"]} """', 'Set spawnto_x64', '0', f"Set spawnto_x64 to {self.execution_config['spawnto_x64']}", ['windows'], 10, '')
+        command = Command('spawnto_x64', f'{self.execution_config["spawnto_x64"]} """', 'Set spawnto_x64', '0', f"Set spawnto_x64 to {self.execution_config['spawnto_x64']}", ['windows'], 30, '')
         await self.execute_task_by_callback(command, callback_id)
-        command = Command('spawnto_x86', f'{self.execution_config["spawnto_x86"]} """', 'Set spawnto_x86', '0', f"Set spawnto_x86 to {self.execution_config['spawnto_x86']}", ['windows'], 10, '')
+        command = Command('spawnto_x86', f'{self.execution_config["spawnto_x86"]} """', 'Set spawnto_x86', '0', f"Set spawnto_x86 to {self.execution_config['spawnto_x86']}", ['windows'], 30, '')
         await self.execute_task_by_callback(command, callback_id)
 
         # Set ppid if set
         if self.execution_config['ppid'] != "None":
-            command = Command('ppid', f'-ppid {self.execution_config["ppid"]}', 'Set ppid', '0', f'Set ppid to {self.execution_config["ppid"]}', ['windows'], 10, '')
+            command = Command('ppid', f'-ppid {self.execution_config["ppid"]}', 'Set ppid', '0', f'Set ppid to {self.execution_config["ppid"]}', ['windows'], 30, '')
             await self.execute_task_by_callback(command, callback_id)
 
         # Set injection technique
-        command = Command('set_injection_technique', self.execution_config["injection_technique"], 'Set injection technique', '0', f'Set injection technique to {self.execution_config["injection_technique"]}', ['windows'], 10, '')
+        command = Command('set_injection_technique', self.execution_config["injection_technique"], 'Set injection technique', '0', f'Set injection technique to {self.execution_config["injection_technique"]}', ['windows'], 30, '')
         await self.execute_task_by_callback(command, callback_id)
 
 
@@ -368,6 +399,16 @@ class IMythic(Executable):
                 e = "Task timed out"
             self.log_error(command.name, command.guid, command.description, command.platforms, command.timeout, callback_id, str(e))
             print(f"[-] Got an exception trying to issue task: {command.ex_technique} {command.parameters} {str(e)}")
+
+    # Check if the binary in the cmd is in the whitelisted binaries
+    def preprocess_cmd(self, cmd):
+        print(cmd.parameters)
+        for x in self.pe_whitelist:
+            if x in cmd.parameters.split(' ')[0]:
+                print(cmd.parameters.split(' ')[0])
+                print(f"found {x} in params, time to do somethign else")
+
+        sys.exit(0)
 
     # Mythic specific implementation
     def clean_cmd(self, cmd):
