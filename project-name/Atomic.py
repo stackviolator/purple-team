@@ -2,6 +2,7 @@ import argparse
 from Command import Command
 import logs
 from mythic import mythic
+import os
 import re
 import sys
 import yaml
@@ -44,22 +45,23 @@ class AtomicTest:
         self.timeout = timeout
         self.callback_id = callback_id
 
+    # Check the command to be run in the TTP to see if the binary is in the whitelist
     async def run_atomic_test(self):
         cmd = Command(self.executor["name"], self.executor["command"], self.name, self.guid, self.description, self.platforms, self.timeout, self.args)
 
         # Run preprocessing
         self.api_instance.clean_cmd(cmd)
-        self.api_instance.preprocess_cmd(cmd)
+        special_exec = self.api_instance.check_special_execution(cmd)
 
         try:
-            await self.check_prereqs()
-            await self.run_executor()
+            await self.check_prereqs(special_exec)
+            await self.run_executor(special_exec)
 
         except Exception as e:
             raise e
 
     # Checks the prereqs, returns an error
-    async def check_prereqs(self):
+    async def check_prereqs(self, special_exec):
         # Check if elevation is required
         has_elevation = await self.api_instance.check_elevation(self.elevation_required)
         if not has_elevation:
@@ -83,42 +85,65 @@ class AtomicTest:
             self.api_instance.log_error(self.name, self.guid, self.description, self.platforms, self.timeout, self.api_instance.child_callback_id, err_str)
             raise Exception(f"Unsupported executor \"{self.executor['name']}\" for task {self.name}")
         
-        # For each dependency
-        for d in self.dependencies:
-            # Pre process command to determine if there is a special execution technique
+        if special_exec:
+            binpath = ''
+            for d in self.dependencies:
+                prereq_cmd = Command(self.dependency_executor, d['prereq_command'], self.name, self.guid, self.description, self.platforms, self.timeout, self.args)
+                self.api_instance.clean_cmd(prereq_cmd)
+                # Alter file exists check
+                if 'Test-Path' in d['prereq_command']:
+                    # Regex to find <name>.exe
+                    name = re.findall(r'\b\w+\.exe\b', prereq_cmd.parameters)[0]
+                    for root, dirs, files in os.walk('payloads'):
+                        if name in files:
+                            binpath = os.path.join(root,name)
+                # Alter download file check
+                if binpath == '':
+                    print("TODO: ADD LOGIC TO DOWNLOAD THE FILE")
+                    sys.exit(0)
 
-            ex = self.dependency_executor
-            prereq_cmd = Command(self.dependency_executor, d['prereq_command'], self.name, self.guid, self.description, self.platforms, self.timeout, self.args)
+                # Register file
+                await self.api_instance.register_file(binpath, self.api_instance.child_callback_id)
+                sys.exit(0)
 
-            # Clean and execute prereq cmd
-            self.api_instance.clean_cmd(prereq_cmd)
 
-            output = await self.api_instance.execute_task(prereq_cmd)
+        else:
+            # For each dependency
+            for d in self.dependencies:
+                # Pre process command to determine if there is a special execution technique
 
-            # There is no output, usually this is from a timeout
-            if output is None:
-                raise Exception(f'prereq_command task execution timed out')
+                ex = self.dependency_executor
+                prereq_cmd = Command(self.dependency_executor, d['prereq_command'], self.name, self.guid, self.description, self.platforms, self.timeout, self.args)
 
-            # If the test fails, execute the get_prereq_command(s)
-            # TODO, this seems like bad code, since i am repeating myself, could be made more elegant, but it works :)
-            if "Test Passed" not in output:
-                print(f"[-] Prereqs not met for test: {self.name}, running get_prereq_command ")
-                # Run get_prereq_command
-                get_prereq_cmd = Command(self.dependency_executor, d['get_prereq_command'], self.name, self.guid, self.description, self.platforms, self.timeout, self.args)
-                self.api_instance.clean_cmd(get_prereq_cmd)
-                output = await self.api_instance.execute_task(get_prereq_cmd)
+                # Clean and execute prereq cmd
+                self.api_instance.clean_cmd(prereq_cmd)
+
+                output = await self.api_instance.execute_task(prereq_cmd)
+
+                # There is no output, usually this is from a timeout
                 if output is None:
-                    # Retry prereq_command
-                    print(f"[*] Reissuing prereq_command")
-                    output = await self.api_instance.execute_task(prereq_cmd)
-                    if output is None:
-                        raise Exception(f'get_prereq_command task execution timed out')
+                    raise Exception(f'prereq_command task execution timed out')
 
+                # If the test fails, execute the get_prereq_command(s)
+                # TODO, this seems like bad code, since i am repeating myself, could be made more elegant, but it works :)
                 if "Test Passed" not in output:
-                    raise Exception(f'Failed to satisfy prerequisites for {self.name}\n\tget_prereq_command: {prereq_cmd.parameters}')
+                    print(f"[-] Prereqs not met for test: {self.name}, running get_prereq_command ")
+                    # Run get_prereq_command
+                    get_prereq_cmd = Command(self.dependency_executor, d['get_prereq_command'], self.name, self.guid, self.description, self.platforms, self.timeout, self.args)
+                    self.api_instance.clean_cmd(get_prereq_cmd)
+                    output = await self.api_instance.execute_task(get_prereq_cmd)
+                    if output is None:
+                        # Retry prereq_command
+                        print(f"[*] Reissuing prereq_command")
+                        output = await self.api_instance.execute_task(prereq_cmd)
+                        if output is None:
+                            raise Exception(f'get_prereq_command task execution timed out')
+
+                    if "Test Passed" not in output:
+                        raise Exception(f'Failed to satisfy prerequisites for {self.name}\n\tget_prereq_command: {prereq_cmd.parameters}')
 
     # Run the TTP
-    async def run_executor(self):
+    async def run_executor(self, special_exec):
         # Run command
         cmd = Command(self.executor["name"], self.executor["command"], self.name, self.guid, self.description, self.platforms, self.timeout, self.args)
         self.api_instance.clean_cmd(cmd)

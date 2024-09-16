@@ -6,6 +6,7 @@ from Executable import *
 import glob
 from mythic import mythic
 import sys
+from utils import mythic_register_file as mregister_file
 import yaml
 
 async def main():
@@ -41,7 +42,8 @@ async def main():
     callback_id = -1
     if api == "mythic":
         # Login and get setup callbacks:)
-        api_instance = IMythic(atomicpath, logfile , binarypath, execution_config, payload_config)
+        api_token = mregister_file.auth(username, password)
+        api_instance = IMythic(atomicpath, logfile , binarypath, execution_config, payload_config, api_token)
         await api_instance.login(username, password)
         await api_instance.get_parent_callback(hostname)
         if set_exec_config:

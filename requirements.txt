@@ -1,4 +1,5 @@
-mythic
 argparse
-pyyaml
 configparser
+mythic
+pyyaml
+requests

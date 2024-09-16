@@ -7,6 +7,7 @@ import logs
 from mythic import mythic
 import re
 import sys
+from utils import mythic_register_file as mregister_file
 
 class Executable(ABC):
     @abstractmethod
@@ -28,7 +29,11 @@ class Executable(ABC):
     Need to determine if there is a special execution technique assoicated with the given command
     """
     @abstractmethod
-    def preprocess_cmd(self):
+    def check_special_execution(self):
+        pass
+
+    @abstractmethod
+    def register_file(self):
         pass
     """
     ART will check if a file exists in some prereqs by running something similar to `if (Test-Path "#{file}") {exit 0} else {exit 1}`.
@@ -50,7 +55,7 @@ class Executable(ABC):
         pass
 
 class IMythic(Executable):
-    def __init__(self, atomics_folder, logfile, binary_path, execution_config, payload_config):
+    def __init__(self, atomics_folder, logfile, binary_path, execution_config, payload_config, api_token):
         self.api = "Mythic"
         self.atomics_folder = atomics_folder
         self.logger = logs.Logger(logfile)
@@ -60,6 +65,7 @@ class IMythic(Executable):
         self.pe_whitelist = []
         self.dotnet_whitelist = []
         self.powershell_whitelist = []
+        self.api_token = api_token
         # Get the commands to use special execution on
         with open(self.payload_config['PEsFile'], 'r') as f:
             for line in f:
@@ -343,6 +349,11 @@ class IMythic(Executable):
         command = Command('set_injection_technique', self.execution_config["injection_technique"], 'Set injection technique', '0', f'Set injection technique to {self.execution_config["injection_technique"]}', ['windows'], 30, '')
         await self.execute_task_by_callback(command, callback_id)
 
+    async def register_file(self, filepath, callback_id):
+        guid = mregister_file.register_new_assembly(filepath, self.api_token)
+        guid = 'dne'
+        mregister_file.register_assembly_to_callback(callback_id, guid, self.api_token)
+
 
     async def execute_task(self, command):
         # Create the task
@@ -401,14 +412,20 @@ class IMythic(Executable):
             print(f"[-] Got an exception trying to issue task: {command.ex_technique} {command.parameters} {str(e)}")
 
     # Check if the binary in the cmd is in the whitelisted binaries
-    def preprocess_cmd(self, cmd):
-        print(cmd.parameters)
+    def check_special_execution(self, cmd):
         for x in self.pe_whitelist:
+            # Check if the tool is in the first argument of the command
             if x in cmd.parameters.split(' ')[0]:
-                print(cmd.parameters.split(' ')[0])
-                print(f"found {x} in params, time to do somethign else")
+                return True
+        for x in self.dotnet_whitelist:
+            # Check if the tool is in the first argument of the command
+            if x in cmd.parameters.split(' ')[0]:
+                return True
+        for x in self.powershell_whitelist:
+            # Check if the tool is in the first argument of the command
+            if x in cmd.parameters.split(' ')[0]:
+                return True
 
-        sys.exit(0)
 
     # Mythic specific implementation
     def clean_cmd(self, cmd):

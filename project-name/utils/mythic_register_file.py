@@ -1,32 +1,13 @@
-import requests
-import os 
 import json 
-import argparse
+import requests
+import urllib3
 
-
-
-file = "exe_guids.json"
-
-
-username = "mythic_admin"
-password = "pwd"
-
-url = "https://target:7443"
-
+url = "https://localhost:7443"
 graphql = "/graphql/"
 register_api = "/api/v1.4/task_upload_file_webhook"
-
-# 'register_assembly {"file":"EXE_GUID"}'
-
-proxy = {
-    "http" : "http://192.168.0.3:8080", 
-    "https" : "http://192.168.0.3:8080"
-}
-
-
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def register_assembly_to_callback(callback_id, assembly_guid, auth_token):
-
     data = {
         "operationName" : "createTasking",
         "variables" : {
@@ -42,56 +23,38 @@ def register_assembly_to_callback(callback_id, assembly_guid, auth_token):
         "query": "mutation createTasking($callback_id: Int, $callback_ids: [Int], $command: String!, $params: String!, $files: [String], $token_id: Int, $tasking_location: String, $original_params: String, $parameter_group_name: String, $parent_task_id: Int, $is_interactive_task: Boolean, $interactive_task_type: Int, $payload_type: String) {\n  createTask(\n    callback_id: $callback_id\n    callback_ids: $callback_ids\n    command: $command\n    params: $params\n    files: $files\n    token_id: $token_id\n    tasking_location: $tasking_location\n    original_params: $original_params\n    parameter_group_name: $parameter_group_name\n    parent_task_id: $parent_task_id\n    is_interactive_task: $is_interactive_task\n    interactive_task_type: $interactive_task_type\n    payload_type: $payload_type\n  ) {\n    status\n    id\n    error\n    __typename\n  }\n}"
     }
 
-
     headers = {
         "Authorization" : "Bearer {}".format(auth_token)
     }
 
-    r = requests.post(url + graphql, data=json.dumps(data), headers=headers, verify=False) #, proxies=proxy)
+    r = requests.post(url + graphql, data=json.dumps(data), headers=headers, verify=False)
     print(r.text)
 
 def register_new_assembly(assembly_name, auth_token):
-
     files = {'file': (assembly_name, open(assembly_name, 'rb'))}
-
     headers = {
         "Authorization" : "Bearer {}".format(auth_token)
     }
 
-    r = requests.post(url + register_api, files=files, headers=headers, verify=False) #, proxies=proxy)
-
-    print(r.text)
+    r = requests.post(url + register_api, files=files, headers=headers, verify=False)
+    resp = json.loads(r.text)
+    if resp['status'] != 'success':
+        print("Handle error in register_new_assembly")
+    return resp['agent_file_id']
 
 def auth(username, password):
-
     data = {
         "username" : username,
         "password" : password
     }
-
-    r = requests.post(url + "/auth", data=json.dumps(data), verify=False) #, proxies=proxy)
+    r = requests.post(url + "/auth", data=json.dumps(data), verify=False)
 
     return json.loads(r.text)["access_token"]
 
 
-def main():
-
-    parser = argparse.ArgumentParser(description="testing")
-    parser.add_argument("--regnew", action="store_true", default=False,required=False,help="Register a new assembly")
-    parser.add_argument("--assembly", default=None,required=False,help="Assembly to register")
-    parser.add_argument("--regcallback", action="store_true", default=False,required=False,help="Register an assembly to a callback by ID")
-    parser.add_argument("--cbid", default=None,required=False,help="Callback id")
-    parser.add_argument("--guid", default=None,required=False,help="Assembly to register")
-    
-    args = parser.parse_args()
-
-    auth_token = auth(username, password)
-
+"""
     if args.regnew:
         register_new_assembly(args.assembly, auth_token)
     elif args.regcallback:
         register_assembly_to_callback(args.cbid, args.guid, auth_token)
-
-
-if __name__ == "__main__":
-    main()
+"""
