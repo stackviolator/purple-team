@@ -4,10 +4,12 @@ import asyncio
 import configparser
 from Executable import *
 import glob
-from mythic import mythic
 import sys
 from utils import mythic_register_file as mregister_file
+import warnings
 import yaml
+
+warnings.filterwarnings("ignore", message="Timeout reached in timeout_generator")
 
 async def main():
     api_instance = None
@@ -46,15 +48,16 @@ async def main():
         api_instance = IMythic(atomicpath, logfile , binarypath, execution_config, payload_config, api_token)
         await api_instance.login(username, password)
         await api_instance.get_parent_callback(hostname)
-        if set_exec_config:
-            await api_instance.set_beacon_execution_config(api_instance.parent_callback_id)
-            await api_instance.set_beacon_execution_config(api_instance.child_callback_id)
-
         try:
             await api_instance.get_child_callback(hostname, 0)
         except Exception as e:
             print("[-] Could not spawn child process")
             sys.exit(1)
+
+        if set_exec_config:
+            await api_instance.set_beacon_execution_config(api_instance.parent_callback_id)
+            await api_instance.set_beacon_execution_config(api_instance.child_callback_id)
+
         if not skip_health:
             await api_instance.update_all_callback_health()
 

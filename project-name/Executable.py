@@ -351,8 +351,13 @@ class IMythic(Executable):
 
     async def register_file(self, filepath, callback_id):
         guid = mregister_file.register_new_assembly(filepath, self.api_token)
-        guid = 'dne'
-        mregister_file.register_assembly_to_callback(callback_id, guid, self.api_token)
+        try:
+            output = await mregister_file.register_assembly_to_callback(callback_id, guid, self.api_instance, 30)
+            print(f"[*] Got output: {output}")
+        except Exception as e:
+            print(f"[-] Error registering assembly {str(e)}")
+            raise e
+
 
 
     async def execute_task(self, command):
@@ -416,15 +421,15 @@ class IMythic(Executable):
         for x in self.pe_whitelist:
             # Check if the tool is in the first argument of the command
             if x in cmd.parameters.split(' ')[0]:
-                return True
+                return True, 'pe'
         for x in self.dotnet_whitelist:
             # Check if the tool is in the first argument of the command
             if x in cmd.parameters.split(' ')[0]:
-                return True
+                return True, 'dotnet'
         for x in self.powershell_whitelist:
             # Check if the tool is in the first argument of the command
             if x in cmd.parameters.split(' ')[0]:
-                return True
+                return True, 'powershell'
 
 
     # Mythic specific implementation

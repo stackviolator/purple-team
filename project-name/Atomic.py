@@ -51,17 +51,17 @@ class AtomicTest:
 
         # Run preprocessing
         self.api_instance.clean_cmd(cmd)
-        special_exec = self.api_instance.check_special_execution(cmd)
+        special_exec, method = self.api_instance.check_special_execution(cmd)
 
         try:
-            await self.check_prereqs(special_exec)
-            await self.run_executor(special_exec)
+            await self.check_prereqs(special_exec, method)
+            await self.run_executor(special_exec, method)
 
         except Exception as e:
             raise e
 
     # Checks the prereqs, returns an error
-    async def check_prereqs(self, special_exec):
+    async def check_prereqs(self, special_exec, method):
         # Check if elevation is required
         has_elevation = await self.api_instance.check_elevation(self.elevation_required)
         if not has_elevation:
@@ -87,25 +87,22 @@ class AtomicTest:
         
         if special_exec:
             binpath = ''
-            for d in self.dependencies:
-                prereq_cmd = Command(self.dependency_executor, d['prereq_command'], self.name, self.guid, self.description, self.platforms, self.timeout, self.args)
-                self.api_instance.clean_cmd(prereq_cmd)
-                # Alter file exists check
-                if 'Test-Path' in d['prereq_command']:
-                    # Regex to find <name>.exe
-                    name = re.findall(r'\b\w+\.exe\b', prereq_cmd.parameters)[0]
-                    for root, dirs, files in os.walk('payloads'):
-                        if name in files:
-                            binpath = os.path.join(root,name)
+            cmd = Command(self.executor["name"], self.executor["command"], self.name, self.guid, self.description, self.platforms, self.timeout, self.args)
+            self.api_instance.clean_cmd(cmd)
+
+            # execute_pe method
+            if method == 'pe':
+                # Check if the file is on disk
+                name = re.findall(r'\b\w+\.exe\b', cmd.parameters)[0] # Regex to find <name>.exe
+                for root, dirs, files in os.walk('payloads'):
+                    if name in files:
+                        binpath = os.path.join(root,name)
                 # Alter download file check
                 if binpath == '':
                     print("TODO: ADD LOGIC TO DOWNLOAD THE FILE")
                     sys.exit(0)
-
                 # Register file
                 await self.api_instance.register_file(binpath, self.api_instance.child_callback_id)
-                sys.exit(0)
-
 
         else:
             # For each dependency
@@ -124,7 +121,7 @@ class AtomicTest:
                 if output is None:
                     raise Exception(f'prereq_command task execution timed out')
 
-                # If the test fails, execute the get_prereq_command(s)
+               # If the test fails, execute the get_prereq_command(s)
                 # TODO, this seems like bad code, since i am repeating myself, could be made more elegant, but it works :)
                 if "Test Passed" not in output:
                     print(f"[-] Prereqs not met for test: {self.name}, running get_prereq_command ")
@@ -143,10 +140,22 @@ class AtomicTest:
                         raise Exception(f'Failed to satisfy prerequisites for {self.name}\n\tget_prereq_command: {prereq_cmd.parameters}')
 
     # Run the TTP
-    async def run_executor(self, special_exec):
-        # Run command
+    async def run_executor(self, special_exec, method):
+        p = []
         cmd = Command(self.executor["name"], self.executor["command"], self.name, self.guid, self.description, self.platforms, self.timeout, self.args)
         self.api_instance.clean_cmd(cmd)
+        if special_exec:
+            if method == "pe":
+                cmd.set_ex_technique("execute_pe")
+                name = re.findall(r'\b\w+\.exe\b', cmd.parameters)[0] # Regex to find <name>.exe
+                if name is None:
+                    raise Exception('Error parsing filename')
+                # Build the command
+                c = f"{''.join(name)} "
+                c += " ".join(i.strip() for i in cmd.parameters.split(' ')[1:])
+                # c += "'"
+                cmd.set_parameters(c)
+
         await self.api_instance.execute_task(cmd)
         # Run cleanup_command if applicable
         if 'cleanup_command' in self.executor:
