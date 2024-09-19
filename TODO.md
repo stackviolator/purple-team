@@ -10,6 +10,8 @@
     - Current solution: most tests dont have multiple prereqs, currently just register the file and run the cmd
         - Most of the prereqs are going to be installing the jawn anyways
 
+- Add support to spawn beacon in different way (idk what different way)
+
 - Add support to run by GUID
 
 - If a dead beacon is detected, log the previous command that likely killed it
