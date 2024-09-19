@@ -1,5 +1,15 @@
 class Command:
-    def __init__(self, ex_technique, parameters, name, guid, description, platforms, timeout, args):
+    def __init__(
+        self,
+        ex_technique,
+        parameters,
+        name,
+        guid,
+        description,
+        platforms,
+        timeout,
+        args,
+    ):
         self.ex_technique = ex_technique
         self.parameters = parameters
         self.name = name
