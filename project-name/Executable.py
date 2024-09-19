@@ -644,10 +644,10 @@ class IMythic(Executable):
             cmd.parameters.replace("PathToAtomicsFolder", self.atomics_folder)
         )
 
-        special_techniques = ['execute_pe', 'execute_assembly', 'inline_assembly']
+        special_techniques = ["execute_pe", "execute_assembly", "inline_assembly"]
         if cmd.ex_technique in special_techniques:
             name = re.findall(r"\b\w+\.exe\b", cmd.parameters)[
-                    0
+                0
             ]  # Regex to find <name>.exe
             if name is None:
                 raise Exception("Error parsing filename")

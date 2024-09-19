@@ -78,7 +78,7 @@ async def main():
 
         if install_winget:
             await api_instance.install_winget()
-            
+
         # Atomic Tests
         for i, t in enumerate(a.tests):
             print(f"[*] Starting execution for task {t.name}")

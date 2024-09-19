@@ -1,5 +1,6 @@
 import os
-import re 
+import re
+
 
 def expand_cmd(cmd, method):
     binpath = ""
@@ -13,5 +14,5 @@ def expand_cmd(cmd, method):
         for root, dirs, files in os.walk("payloads"):
             if name in files:
                 binpath = os.path.join(root, name)
-                
+
         print(binpath)
