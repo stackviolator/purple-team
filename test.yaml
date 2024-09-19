@@ -22,8 +22,9 @@ atomic_tests:
           echo "this is a command to get a prerequisite"
     executor:
       command: |
-        "#{file}" "-t reg -c 'C:\Windows\System32\cmd.exe' -a '/c calc.exe' -k 'hkcurun' -v 'Test Stuff' -m add"
+        "#{file}" -t reg -c "cmd.exe" -a "/c calc.exe" -k "hkcurun" -v "Test Stuff" -m add
       cleanup_command: |
-        "#{file}" "-t reg -k 'hkcurun' -v 'Test Stuff' -m remove"
-      name: command_prompt
+        "#{file}" -t reg -k "hkcurun" -v "Test Stuff" -m remove
+      name: inline_assembly
+      # name: execute_assembly
       elevation_required: true

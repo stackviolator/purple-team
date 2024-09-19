@@ -231,21 +231,8 @@ class AtomicTest:
             self.args,
         )
         self.api_instance.clean_cmd(cmd)
-        if special_exec:
-            if method == "pe" or method == "dotnet":
-                cmd.set_ex_technique("execute_pe" if method == "pe" else "execute_assembly")
-                name = re.findall(r"\b\w+\.exe\b", cmd.parameters)[
-                    0
-                ]  # Regex to find <name>.exe
-                if name is None:
-                    raise Exception("Error parsing filename")
-                # Build the command
-                c = f"{''.join(name)} "
-                c += " ".join(i.strip() for i in cmd.parameters.split(" ")[1:])
-                # c += "'"
-                cmd.set_parameters(c)
-
         await self.api_instance.execute_task(cmd)
+
         # Run cleanup_command if applicable
         if "cleanup_command" in self.executor:
             cleanup_cmd = Command(
@@ -258,7 +245,9 @@ class AtomicTest:
                 self.timeout,
                 self.args,
             )
+
             self.api_instance.clean_cmd(cleanup_cmd)
+
             print(
                 f"[+] Cleaning up with '{cleanup_cmd.ex_technique} {cleanup_cmd.parameters}'"
             )

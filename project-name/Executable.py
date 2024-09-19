@@ -598,6 +598,15 @@ class IMythic(Executable):
 
     # Check if the binary in the cmd is in the whitelisted binaries
     def check_special_execution(self, cmd):
+        # Custom rules should follow this format
+        if cmd.ex_technique == "execute_pe":
+            return True, "pe"
+        if cmd.ex_technique == "execute_assembly":
+            return True, "dotnet"
+        if cmd.ex_technique == "powershell":
+            return True, "powershell"
+
+        # Standard rules might not
         for x in self.pe_whitelist:
             # Check if the tool is in the first argument of the command
             if x in cmd.parameters.split(" ")[0]:
@@ -634,6 +643,18 @@ class IMythic(Executable):
         cmd.set_parameters(
             cmd.parameters.replace("PathToAtomicsFolder", self.atomics_folder)
         )
+
+        special_techniques = ['execute_pe', 'execute_assembly', 'inline_assembly']
+        if cmd.ex_technique in special_techniques:
+            name = re.findall(r"\b\w+\.exe\b", cmd.parameters)[
+                    0
+            ]  # Regex to find <name>.exe
+            if name is None:
+                raise Exception("Error parsing filename")
+            # Build the command
+            c = f"{''.join(name)} "
+            c += " ".join(i.strip() for i in cmd.parameters.split(" ")[1:])
+            cmd.set_parameters(c)
 
     def strip_args(self, cmd):
         # Find all arguments in the yaml
