@@ -14,6 +14,8 @@
 
 - If a dead beacon is detected, log the previous command that likely killed it
 
+- Add support to spawn beacon in different way (idk what different way)
+
 ### Medium
 - Just run cleanup commands (specify by GUID maybe) (in case a beacon dies when dumping lsass or something)
 
