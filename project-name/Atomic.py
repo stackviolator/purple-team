@@ -5,6 +5,7 @@ from mythic import mythic
 import os
 import re
 import sys
+import utils.cmd_parse as cmd_parse
 import yaml
 
 DISALLOWED_EXECUTORS = ["manual"]
@@ -140,7 +141,7 @@ class AtomicTest:
             self.api_instance.clean_cmd(cmd)
 
             # execute_pe method
-            if method == "pe":
+            if method == "pe" or method == "dotnet":
                 # Check if the file is on disk
                 name = re.findall(r"\b\w+\.exe\b", cmd.parameters)[
                     0
@@ -231,8 +232,8 @@ class AtomicTest:
         )
         self.api_instance.clean_cmd(cmd)
         if special_exec:
-            if method == "pe":
-                cmd.set_ex_technique("execute_pe")
+            if method == "pe" or method == "dotnet":
+                cmd.set_ex_technique("execute_pe" if method == "pe" else "execute_assembly")
                 name = re.findall(r"\b\w+\.exe\b", cmd.parameters)[
                     0
                 ]  # Regex to find <name>.exe

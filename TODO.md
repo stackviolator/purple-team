@@ -18,6 +18,8 @@
 
 - Add support to spawn beacon in different way (idk what different way)
 
+- Check if the an assembly is already registered before registering it
+
 ### Medium
 - Just run cleanup commands (specify by GUID maybe) (in case a beacon dies when dumping lsass or something)
 

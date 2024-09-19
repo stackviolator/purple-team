@@ -610,6 +610,7 @@ class IMythic(Executable):
             # Check if the tool is in the first argument of the command
             if x in cmd.parameters.split(" ")[0]:
                 return True, "powershell"
+        return None, None
 
     # Mythic specific implementation
     def clean_cmd(self, cmd):
